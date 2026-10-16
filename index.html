@@ -1,0 +1,5511 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D IPL AI Auction Arena - 10 Teams</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    <!-- Supabase JS Client for Private Bucket access -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+      html,
+      body {
+        background-color: #04030a;
+        color: #ffffff;
+        font-family:
+          "Poppins",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        overflow: hidden;
+      }
+
+      /* ===================== ANIMATED STADIUM BACKGROUND ===================== */
+      #bg-arena {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        background:
+          radial-gradient(
+            120% 90% at 50% 8%,
+            rgba(245, 158, 11, 0.18) 0%,
+            rgba(245, 158, 11, 0) 45%
+          ),
+          radial-gradient(
+            90% 70% at 15% 100%,
+            rgba(59, 130, 246, 0.18) 0%,
+            rgba(59, 130, 246, 0) 55%
+          ),
+          radial-gradient(
+            90% 70% at 85% 100%,
+            rgba(236, 26, 133, 0.16) 0%,
+            rgba(236, 26, 133, 0) 55%
+          ),
+          radial-gradient(140% 120% at 50% 120%, #0a0716 0%, #04030a 60%);
+        animation: arenaBreathe 9s ease-in-out infinite;
+      }
+      @keyframes arenaBreathe {
+        0%,
+        100% {
+          filter: brightness(1) saturate(1);
+        }
+        50% {
+          filter: brightness(1.35) saturate(1.25);
+        }
+      }
+
+      #bg-beams {
+        position: fixed;
+        inset: -20%;
+        z-index: 0;
+        background: conic-gradient(
+          from 0deg at 50% -10%,
+          rgba(245, 158, 11, 0) 0deg,
+          rgba(245, 158, 11, 0.1) 20deg,
+          rgba(245, 158, 11, 0) 40deg,
+          rgba(59, 130, 246, 0) 90deg,
+          rgba(59, 130, 246, 0.1) 110deg,
+          rgba(59, 130, 246, 0) 130deg,
+          rgba(236, 26, 133, 0) 220deg,
+          rgba(236, 26, 133, 0.1) 240deg,
+          rgba(236, 26, 133, 0) 260deg,
+          rgba(245, 158, 11, 0) 360deg
+        );
+        mix-blend-mode: screen;
+        animation: beamSweep 14s linear infinite;
+        opacity: 0.7;
+      }
+      @keyframes beamSweep {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      #bg-grid {
+        position: fixed;
+        left: -50%;
+        right: -50%;
+        bottom: -10%;
+        height: 70%;
+        z-index: 0;
+        background-image:
+          linear-gradient(rgba(245, 158, 11, 0.22) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(245, 158, 11, 0.14) 1px, transparent 1px);
+        background-size: 60px 60px;
+        transform: perspective(420px) rotateX(68deg);
+        transform-origin: bottom center;
+        mask-image: linear-gradient(
+          to top,
+          rgba(0, 0, 0, 1) 0%,
+          rgba(0, 0, 0, 0) 85%
+        );
+        -webkit-mask-image: linear-gradient(
+          to top,
+          rgba(0, 0, 0, 1) 0%,
+          rgba(0, 0, 0, 0) 85%
+        );
+        animation: gridScroll 3.2s linear infinite;
+        opacity: 0.5;
+      }
+      @keyframes gridScroll {
+        0% {
+          background-position:
+            0 0,
+            0 0;
+        }
+        100% {
+          background-position:
+            0 60px,
+            0 0;
+        }
+      }
+
+      #bg-embers {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .ember {
+        position: absolute;
+        bottom: -20px;
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: radial-gradient(
+          circle,
+          #ffd569 0%,
+          #f59e0b 40%,
+          rgba(245, 158, 11, 0) 70%
+        );
+        animation: emberRise linear infinite;
+        opacity: 0;
+      }
+      @keyframes emberRise {
+        0% {
+          transform: translateY(0) scale(0.6);
+          opacity: 0;
+        }
+        10% {
+          opacity: 0.9;
+        }
+        90% {
+          opacity: 0.7;
+        }
+        100% {
+          transform: translateY(-105vh) scale(1.1);
+          opacity: 0;
+        }
+      }
+
+      #bg-vignette {
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        box-shadow: inset 0 0 220px 60px rgba(0, 0, 0, 0.85);
+      }
+      #canvas-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        pointer-events: none;
+      }
+      .ui-layer {
+        position: relative;
+        z-index: 10;
+        pointer-events: none;
+      }
+      .interactive {
+        pointer-events: auto;
+      }
+
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.5);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(245, 158, 11, 0.5);
+        border-radius: 99px;
+      }
+
+      .neon-glow-amber {
+        box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+      }
+      .neon-glow-green {
+        box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+      }
+
+      @keyframes bidPulse {
+        0%,
+        100% {
+          box-shadow: 0 0 24px rgba(34, 197, 94, 0.45);
+        }
+        50% {
+          box-shadow: 0 0 46px rgba(34, 197, 94, 0.85);
+        }
+      }
+      .bid-live {
+        animation: bidPulse 1.4s ease-in-out infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          background-position: -200% center;
+        }
+        100% {
+          background-position: 200% center;
+        }
+      }
+      .title-shimmer {
+        background: linear-gradient(
+          90deg,
+          #f59e0b 0%,
+          #fde68a 25%,
+          #f97316 50%,
+          #fde68a 75%,
+          #f59e0b 100%
+        );
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: shimmer 4s linear infinite;
+      }
+    </style>
+  </head>
+  <body
+    class="w-screen h-screen flex flex-col justify-between p-4 md:p-6 select-none"
+  >
+    <div id="bg-arena"></div>
+    <div id="bg-beams"></div>
+    <div id="bg-grid"></div>
+    <div id="bg-embers"></div>
+    <div id="canvas-container"></div>
+    <div id="bg-vignette"></div>
+
+    <div
+      id="notification-banner"
+      class="fixed top-6 left-1/2 -translate-x-1/2 z-[100] max-w-sm w-full bg-slate-900/95 border-l-4 border-amber-500 text-amber-200 p-4 rounded-r-xl shadow-2xl backdrop-blur-md transition-all duration-300 transform -translate-y-20 opacity-0 pointer-events-none"
+    >
+      <div class="flex items-center gap-3">
+        <span class="text-xl">⚠️</span>
+        <p
+          id="notification-text"
+          class="text-xs font-semibold tracking-wide"
+        ></p>
+      </div>
+    </div>
+
+    <div
+      id="squad-modal"
+      class="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4 transition-all duration-300 opacity-0"
+    >
+      <div
+        class="bg-slate-900 border-2 border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative flex flex-col max-h-[80vh]"
+      >
+        <button
+          onclick="closeSquadModal()"
+          class="absolute top-4 right-4 text-slate-400 hover:text-white font-bold text-lg cursor-pointer"
+        >
+          &times;
+        </button>
+        <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+          <div id="modal-team-color-bar" class="w-3 h-8 rounded"></div>
+          <div>
+            <h2 id="modal-team-title" class="text-xl font-black tracking-wide">
+              TEAM ROSTER
+            </h2>
+            <p
+              id="modal-team-subtitle"
+              class="text-xs text-slate-400 font-bold tracking-wider"
+            ></p>
+          </div>
+        </div>
+        <div
+          id="modal-roster-list"
+          class="overflow-y-auto flex-grow my-4 space-y-2 pr-1"
+        ></div>
+        <div
+          class="border-t border-slate-800 pt-3 flex justify-between items-center"
+        >
+          <span
+            class="text-xs font-bold text-slate-400 uppercase tracking-wider"
+            >Remaining Purse:</span
+          >
+          <span
+            id="modal-team-remaining-purse"
+            class="text-lg font-black text-emerald-400"
+            >120.00 Cr</span
+          >
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="lobby-screen"
+      class="absolute inset-0 z-50 bg-slate-950/60 flex flex-col items-center justify-center p-4 interactive transition-all duration-500 overflow-y-auto backdrop-blur-sm"
+    >
+      <div
+        class="bg-slate-900/80 border border-amber-500/40 p-6 md:p-8 rounded-2xl shadow-[0_0_60px_rgba(245,158,11,0.2)] max-w-2xl w-full text-center backdrop-blur-xl my-auto"
+      >
+        <div
+          class="inline-block bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs px-3 py-1 rounded-full font-bold mb-4 tracking-widest"
+        >
+          ⚡ REAL-TIME MULTIPLAYER ARENA ⚡
+        </div>
+        <h1
+          class="text-3xl md:text-4xl font-black tracking-tight text-white mb-2"
+        >
+          IPL <span class="title-shimmer">SUPER AUCTION</span> 2026
+        </h1>
+        <p class="text-slate-400 mb-6 text-sm">
+          Configure a new room as Host or connect directly to your squad's draft
+          session.
+        </p>
+
+        <div
+          class="flex bg-slate-950/80 p-1.5 rounded-xl gap-2 border border-slate-800/80 mb-6 max-w-md mx-auto"
+        >
+          <button
+            id="tab-create"
+            onclick="switchLobbyTab('create')"
+            class="flex-1 py-2.5 px-4 rounded-lg text-xs font-black tracking-widest transition-all cursor-pointer bg-amber-500 text-slate-950"
+          >
+            👑 CREATE ROOM (HOST)
+          </button>
+          <button
+            id="tab-join"
+            onclick="switchLobbyTab('join')"
+            class="flex-1 py-2.5 px-4 rounded-lg text-xs font-black tracking-widest transition-all cursor-pointer text-slate-400 hover:text-white hover:bg-slate-800/50"
+          >
+            ⚔️ JOIN ROOM (PLAYER)
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+          <div class="space-y-4">
+            <div>
+              <label
+                class="block text-xs font-bold text-slate-400 mb-1.5 tracking-wider"
+                >MANAGER NAME</label
+              >
+              <input
+                type="text"
+                id="player-name-input"
+                placeholder="Enter your name..."
+                class="w-full bg-slate-950/80 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-amber-500 text-sm"
+              />
+            </div>
+            <input type="hidden" id="room-code-input" />
+
+            <div id="create-room-section" class="space-y-3">
+              <div>
+                <label
+                  class="block text-xs font-bold text-slate-400 mb-1.5 tracking-wider"
+                  >ROOM VISIBILITY</label
+                >
+                <div
+                  class="flex bg-slate-950/80 p-1 rounded-lg gap-1.5 border border-slate-800/80"
+                >
+                  <button
+                    type="button"
+                    id="visibility-public-btn"
+                    onclick="setRoomVisibility('public')"
+                    class="flex-1 py-2 px-2 rounded-md text-[11px] font-black tracking-wider transition-all cursor-pointer"
+                  >
+                    🌐 PUBLIC
+                  </button>
+                  <button
+                    type="button"
+                    id="visibility-private-btn"
+                    onclick="setRoomVisibility('private')"
+                    class="flex-1 py-2 px-2 rounded-md text-[11px] font-black tracking-wider transition-all cursor-pointer"
+                  >
+                    🔒 PRIVATE
+                  </button>
+                </div>
+                <p
+                  id="visibility-hint"
+                  class="text-[10px] text-slate-500 mt-1 leading-snug"
+                >
+                  Public rooms can be joined by anyone browsing the Join tab —
+                  no code required.
+                </p>
+              </div>
+              <div>
+                <label
+                  class="block text-xs font-bold text-slate-400 mb-1 tracking-wider"
+                  >AUTO-GENERATED ROOM CODE</label
+                >
+                <div
+                  class="bg-amber-500/10 border border-amber-500/20 py-3 px-4 rounded-lg text-center"
+                >
+                  <span
+                    id="host-room-display"
+                    class="text-xl font-mono font-black text-amber-400 tracking-widest"
+                    >---</span
+                  >
+                </div>
+              </div>
+            </div>
+
+            <div id="join-room-section" class="space-y-3 hidden">
+              <div>
+                <label
+                  class="block text-xs font-bold text-slate-400 mb-1 tracking-wider"
+                  >ENTER ROOM CODE (PRIVATE)</label
+                >
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    id="join-room-code-display"
+                    oninput="syncRoomCodeInput(this.value)"
+                    placeholder="e.g. IPL-GOLD"
+                    class="w-full bg-slate-950/80 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-amber-500 uppercase tracking-widest text-sm"
+                  />
+                  <button
+                    onclick="connectToRoomSignal()"
+                    class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 rounded-lg text-sm transition-colors cursor-pointer"
+                  >
+                    Connect
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label
+                  class="block text-xs font-bold text-slate-400 mb-1 tracking-wider"
+                  >🌐 OPEN PUBLIC ROOMS</label
+                >
+                <div
+                  id="public-rooms-list"
+                  class="space-y-1.5 max-h-32 overflow-y-auto pr-1"
+                >
+                  <p class="text-[11px] text-slate-500 italic py-2">
+                    Searching for open rooms...
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label
+                class="block text-xs font-bold text-slate-400 tracking-wider"
+                >SELECT YOUR FRANCHISE (1 PER TEAM)</label
+              >
+              <span
+                id="lobby-member-count"
+                class="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full whitespace-nowrap"
+              >
+                0 online
+              </span>
+            </div>
+            <div id="lobby-teams-grid" class="grid grid-cols-5 gap-2"></div>
+          </div>
+        </div>
+
+        <button
+          id="join-btn"
+          onclick="joinAuctionRoom()"
+          class="w-full mt-6 bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black py-4 rounded-xl shadow-lg tracking-widest text-sm cursor-pointer"
+        >
+          CREATE & LOCK IN TEAM
+        </button>
+      </div>
+
+      <div class="mt-8 text-center">
+        <div
+          class="inline-flex flex-col items-center gap-2 bg-slate-900/60 border border-slate-800 p-4 rounded-2xl backdrop-blur-md"
+        >
+          <div class="flex items-center gap-2">
+            <span
+              class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+            ></span>
+            <p
+              class="text-[10px] font-black tracking-[4px] text-slate-400 uppercase"
+            >
+              Website Users:
+              <span id="global-user-count" class="text-emerald-400">1</span>
+            </p>
+          </div>
+          <p
+            class="text-[10px] font-black tracking-[4px] text-slate-600 uppercase"
+          >
+            Made by Kishore S.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="main-arena"
+      class="hidden flex-col justify-between h-full opacity-0 transition-opacity duration-1000 relative z-10"
+    >
+      <div
+        class="ui-layer flex flex-col md:flex-row justify-between gap-4 items-start w-full"
+      >
+        <div
+          class="bg-slate-950/80 backdrop-blur-md p-4 rounded-xl border border-slate-800/80 flex flex-col gap-1 interactive shadow-xl max-w-sm"
+        >
+          <div class="flex items-center gap-2">
+            <span
+              class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"
+            ></span>
+            <span
+              id="display-room-code"
+              class="text-xs font-mono font-bold tracking-widest text-slate-400"
+              >ROOM: ---</span
+            >
+          </div>
+          <h1 id="user-display-info" class="text-sm font-black text-amber-400">
+            Manager: ---
+          </h1>
+          <div
+            id="connection-status-pill"
+            class="text-[10px] text-emerald-400 font-mono mt-1"
+          >
+            ONLINE NOW: 1
+          </div>
+          <div
+            id="roster-status-pill"
+            class="text-[10px] text-slate-400 font-mono"
+          >
+            JOINED THIS ROOM: 1
+          </div>
+          <div
+            id="set-indicator"
+            class="mt-2 text-xs font-black text-amber-500 bg-amber-500/10 py-1 px-2 rounded tracking-widest border border-amber-500/30"
+          >
+            SET: 1
+          </div>
+          <div
+            id="host-controls"
+            class="hidden mt-2 flex gap-2 interactive flex-wrap"
+          >
+            <button
+              id="pause-auction-btn"
+              onclick="toggleAuctionPause()"
+              title="Pause / Resume Auction (Host Only)"
+              class="flex-1 bg-slate-800 hover:bg-slate-700 border border-amber-500/40 text-amber-300 text-xs font-black py-2 px-2 rounded-lg cursor-pointer tracking-wider flex items-center justify-center gap-1 transition-colors"
+            >
+              <span id="pause-btn-icon">⏸️</span
+              ><span id="pause-btn-label">PAUSE</span>
+            </button>
+            <button
+              id="manage-room-btn"
+              onclick="openManageRoomModal()"
+              title="Kick or Add Managers (Host Only)"
+              class="flex-1 bg-slate-800 hover:bg-blue-900/60 border border-blue-500/40 text-blue-300 text-xs font-black py-2 px-2 rounded-lg cursor-pointer tracking-wider flex items-center justify-center gap-1 transition-colors"
+            >
+              👥 MANAGE
+            </button>
+            <button
+              id="complete-auction-btn"
+              onclick="confirmCompleteAuction()"
+              title="End Auction Now (Host Only)"
+              class="flex-1 bg-slate-800 hover:bg-red-900/60 border border-red-500/40 text-red-300 text-xs font-black py-2 px-2 rounded-lg cursor-pointer tracking-wider flex items-center justify-center gap-1 transition-colors"
+            >
+              🏁 END
+            </button>
+          </div>
+        </div>
+
+        <div
+          class="grid grid-cols-5 md:grid-cols-10 gap-2 w-full md:w-auto interactive overflow-x-auto pb-1"
+        >
+          <div
+            id="mi-purse-badge"
+            onclick="openSquadModal('MI')"
+            class="bg-slate-950/90 border border-blue-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-blue-400 font-bold">MI</div>
+            <div id="badge-purse-MI" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="csk-purse-badge"
+            onclick="openSquadModal('CSK')"
+            class="bg-slate-950/90 border border-yellow-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-yellow-400 font-bold">CSK</div>
+            <div id="badge-purse-CSK" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="rcb-purse-badge"
+            onclick="openSquadModal('RCB')"
+            class="bg-slate-950/90 border border-red-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-red-400 font-bold">RCB</div>
+            <div id="badge-purse-RCB" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="kkr-purse-badge"
+            onclick="openSquadModal('KKR')"
+            class="bg-slate-950/90 border border-purple-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-purple-400 font-bold">KKR</div>
+            <div id="badge-purse-KKR" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="rr-purse-badge"
+            onclick="openSquadModal('RR')"
+            class="bg-slate-950/90 border border-pink-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-pink-400 font-bold">RR</div>
+            <div id="badge-purse-RR" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="srh-purse-badge"
+            onclick="openSquadModal('SRH')"
+            class="bg-slate-950/90 border border-orange-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-orange-400 font-bold">SRH</div>
+            <div id="badge-purse-SRH" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="dc-purse-badge"
+            onclick="openSquadModal('DC')"
+            class="bg-slate-950/90 border border-sky-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-sky-400 font-bold">DC</div>
+            <div id="badge-purse-DC" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="pbks-purse-badge"
+            onclick="openSquadModal('PBKS')"
+            class="bg-slate-950/90 border border-red-400/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-red-300 font-bold">PBKS</div>
+            <div id="badge-purse-PBKS" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="lsg-purse-badge"
+            onclick="openSquadModal('LSG')"
+            class="bg-slate-950/90 border border-teal-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-teal-400 font-bold">LSG</div>
+            <div id="badge-purse-LSG" class="text-xs font-black">120 Cr</div>
+          </div>
+          <div
+            id="gt-purse-badge"
+            onclick="openSquadModal('GT')"
+            class="bg-slate-950/90 border border-indigo-500/20 p-2 rounded-lg text-center min-w-[75px] cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div class="text-[9px] text-indigo-400 font-bold">GT</div>
+            <div id="badge-purse-GT" class="text-xs font-black">120 Cr</div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="ui-layer flex flex-col items-center justify-center flex-grow my-4 w-full"
+      >
+        <div
+          id="paused-banner"
+          class="hidden bg-amber-500/15 border-2 border-amber-500 text-amber-300 font-black tracking-widest text-sm px-6 py-3 rounded-xl mb-4 interactive text-center"
+        >
+          ⏸️ AUCTION PAUSED BY HOST
+        </div>
+
+        <div
+          id="auction-completed-banner"
+          class="hidden bg-emerald-500/15 border-2 border-emerald-500 text-emerald-300 font-black tracking-widest text-sm px-6 py-3 rounded-xl mb-4 interactive text-center"
+        >
+          🏁 AUCTION ENDED BY HOST — FINAL SQUADS ARE LOCKED IN
+        </div>
+
+        <div
+          id="video-overlay"
+          class="w-[340px] h-[340px] md:w-[480px] md:h-[480px] bg-black rounded-2xl border-2 border-amber-500 overflow-hidden relative hidden"
+        >
+          <audio id="intro-audio" preload="auto"></audio>
+          <video
+            id="my-video-player"
+            class="absolute inset-0 w-full h-full object-cover"
+            autoplay
+            muted
+            playsinline
+            loop
+          >
+            <source id="player-video-source" src="" type="video/mp4" />
+          </video>
+          <div class="absolute inset-0 bg-black/25"></div>
+          <div
+            class="absolute top-4 right-4 w-16 h-16 rounded-full bg-black/70 border-2 border-yellow-400 flex items-center justify-center"
+          >
+            <span
+              id="countdown-timer"
+              class="text-3xl font-black text-yellow-400"
+              >10</span
+            >
+          </div>
+          <div class="absolute bottom-8 left-0 right-0 text-center">
+            <h2
+              id="video-player-name"
+              class="text-white text-4xl font-black drop-shadow-lg"
+            >
+              ---
+            </h2>
+            <p class="text-yellow-400 tracking-[6px] font-bold drop-shadow-md">
+              SUPERSTAR ENTRY
+            </p>
+          </div>
+          <div class="absolute bottom-0 left-0 right-0 h-2 bg-white/20">
+            <div
+              id="reveal-progress"
+              class="h-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500"
+              style="width: 100%"
+            ></div>
+          </div>
+        </div>
+
+        <div
+          id="host-start-panel"
+          class="hidden bg-slate-900/90 border border-amber-500/30 p-6 rounded-2xl text-center max-w-sm interactive"
+        >
+          <p class="text-xs text-amber-400 font-bold tracking-widest mb-2">
+            YOU ARE THE HOST
+          </p>
+          <h3 class="text-lg font-black mb-4">Launch the Draft Phase</h3>
+          <button
+            onclick="broadcastStartAuction()"
+            class="bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black px-6 py-3 rounded-lg shadow-lg cursor-pointer text-sm tracking-wider"
+          >
+            START SUPER AUCTION
+          </button>
+        </div>
+
+        <div
+          id="wait-start-panel"
+          class="hidden bg-slate-900/90 border border-slate-800 p-6 rounded-2xl text-center max-w-sm"
+        >
+          <p class="text-xs text-slate-400 font-bold tracking-widest mb-2">
+            WAITING FOR MANAGER
+          </p>
+          <h3 class="text-lg font-black text-slate-300">
+            Host is starting the lobby...
+          </h3>
+          <div
+            class="animate-pulse h-1 bg-amber-500/50 rounded-full mt-4 w-24 mx-auto"
+          ></div>
+        </div>
+
+        <div
+          id="stats-panel"
+          class="hidden w-full max-w-[480px] bg-slate-950/90 border border-slate-800 rounded-2xl p-5 shadow-2xl mt-4 interactive backdrop-blur-md"
+        >
+          <div
+            class="flex justify-between items-start border-b border-slate-800 pb-3"
+          >
+            <div>
+              <h2
+                id="player-name"
+                class="text-2xl font-black text-white tracking-wide"
+              >
+                ---
+              </h2>
+              <span
+                id="player-role"
+                class="bg-amber-500/20 text-amber-400 text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider mt-1.5 inline-block"
+                >---</span
+              >
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] uppercase font-bold text-slate-500">
+                Current Bid
+              </p>
+              <p
+                id="current-bid-display"
+                class="text-2xl font-black text-emerald-400"
+              >
+                ₹0.00 Cr
+              </p>
+              <p
+                id="leading-team"
+                class="text-xs text-slate-300 font-bold bg-slate-900 px-2 py-0.5 rounded mt-1 inline-block"
+              >
+                ---
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 my-4">
+            <div
+              class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl text-center"
+            >
+              <span
+                class="text-[9px] text-slate-500 block uppercase font-bold tracking-wider"
+                >IPL Matches</span
+              >
+              <span
+                id="stat-matches"
+                class="text-base font-black text-slate-100"
+                >-</span
+              >
+            </div>
+            <div
+              class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl text-center"
+            >
+              <span
+                id="stat-metric-label"
+                class="text-[9px] text-slate-500 block uppercase font-bold tracking-wider"
+                >Runs / Wickets</span
+              >
+              <span
+                id="stat-primary"
+                class="text-base font-black text-slate-100"
+                >-</span
+              >
+            </div>
+            <div
+              class="bg-slate-900/60 border border-slate-800 p-2.5 rounded-xl text-center"
+            >
+              <span
+                id="stat-sr-label"
+                class="text-[9px] text-slate-500 block uppercase font-bold tracking-wider"
+                >S/R / Economy</span
+              >
+              <span id="stat-sr" class="text-base font-black text-slate-100"
+                >-</span
+              >
+            </div>
+          </div>
+
+          <div
+            id="auctioneer-speech-bubble"
+            class="bg-slate-900/90 border-l-4 border-amber-500 p-3 text-xs text-amber-100/90 italic rounded-r font-medium tracking-wide"
+          >
+            AI Auctioneer: Connecting neural networks...
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="ui-layer w-full flex justify-center pb-6 interactive gap-4 flex-wrap justify-center"
+      >
+        <div id="bid-controls" class="hidden w-full max-w-[480px]">
+          <button
+            id="user-bidding-btn"
+            onclick="placeUserBid()"
+            class="w-full bid-live bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black py-4 px-6 rounded-2xl text-base tracking-widest cursor-pointer flex items-center justify-center gap-2"
+          >
+            <span>📢</span> PLACE BID AS <span id="user-team-tag">---</span>
+          </button>
+        </div>
+
+        <div
+          id="auction-stats-controls"
+          class="hidden flex gap-2 flex-wrap justify-center"
+        >
+          <button
+            onclick="showAuctionStats('sets')"
+            class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black py-2 px-4 rounded-lg text-xs tracking-widest cursor-pointer transition-transform hover:scale-105"
+          >
+            📦 SETS
+          </button>
+          <button
+            onclick="showAuctionStats('top10')"
+            class="bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white font-black py-2 px-4 rounded-lg text-xs tracking-widest cursor-pointer transition-transform hover:scale-105"
+          >
+            ⭐ TOP 10 SOLD
+          </button>
+          <button
+            onclick="showAuctionStats('sold')"
+            class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-2 px-4 rounded-lg text-xs tracking-widest cursor-pointer transition-transform hover:scale-105"
+          >
+            ✓ SOLD PLAYERS
+          </button>
+          <button
+            onclick="showAuctionStats('unsold')"
+            class="bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-black py-2 px-4 rounded-lg text-xs tracking-widest cursor-pointer transition-transform hover:scale-105"
+          >
+            ✗ UNSOLD
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="stats-modal"
+        class="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4 transition-all duration-300 opacity-0 overflow-y-auto"
+      >
+        <div
+          class="bg-slate-900 border-2 border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[85vh] overflow-y-auto"
+        >
+          <button
+            onclick="closeStatsModal()"
+            class="absolute top-4 right-4 text-slate-400 hover:text-white font-bold text-lg cursor-pointer"
+          >
+            &times;
+          </button>
+          <div
+            class="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4"
+          >
+            <h2
+              id="stats-modal-title"
+              class="text-2xl font-black tracking-wide"
+            >
+              AUCTION STATISTICS
+            </h2>
+          </div>
+          <div id="stats-modal-content" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <div
+        id="manage-room-modal"
+        class="fixed inset-0 z-[150] bg-slate-950/80 backdrop-blur-md hidden flex items-center justify-center p-4 transition-all duration-300 opacity-0 overflow-y-auto"
+      >
+        <div
+          class="bg-slate-900 border-2 border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[85vh] overflow-y-auto"
+        >
+          <button
+            onclick="closeManageRoomModal()"
+            class="absolute top-4 right-4 text-slate-400 hover:text-white font-bold text-lg cursor-pointer"
+          >
+            &times;
+          </button>
+          <h2
+            class="text-xl font-black tracking-wide border-b border-slate-800 pb-3 mb-4 text-blue-300"
+          >
+            👥 MANAGE ROOM (HOST)
+          </h2>
+          <div class="mb-5">
+            <h3
+              class="text-xs font-black text-slate-400 tracking-widest mb-2 uppercase"
+            >
+              Connected Managers
+            </h3>
+            <div id="manage-connected-list" class="space-y-2"></div>
+          </div>
+          <div>
+            <h3
+              class="text-xs font-black text-slate-400 tracking-widest mb-2 uppercase"
+            >
+              Unclaimed Franchises
+            </h3>
+            <div id="manage-unclaimed-list" class="space-y-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ===================== BOTTOM RIGHT EVENT LOG / MESSAGE UI ===================== -->
+    <div
+      class="fixed bottom-6 right-6 z-[200] flex flex-col items-end gap-3 pointer-events-none"
+    >
+      <!-- Chat/Log Panel (Hidden by default) -->
+      <div
+        id="event-log-panel"
+        class="w-72 md:w-80 bg-slate-900/95 border border-slate-700 rounded-xl shadow-2xl backdrop-blur-md flex flex-col hidden pointer-events-auto transition-all transform origin-bottom-right"
+      >
+        <div
+          class="bg-slate-800 p-3 rounded-t-xl border-b border-slate-700 flex justify-between items-center"
+        >
+          <h3 class="text-xs font-black text-amber-400 tracking-widest">
+            📜 LIVE AUCTION FEED
+          </h3>
+          <button
+            onclick="toggleEventLog()"
+            class="text-slate-400 hover:text-white cursor-pointer text-lg leading-none"
+          >
+            &times;
+          </button>
+        </div>
+        <div
+          id="event-log-content"
+          class="p-3 h-64 overflow-y-auto flex flex-col gap-2 text-[11px] md:text-xs text-slate-300 font-medium scroll-smooth"
+        >
+          <div class="text-center text-[10px] text-slate-500 italic">
+            Welcome to the IPL Super Auction! Feed online.
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating Message Logo / Button -->
+      <button
+        onclick="toggleEventLog()"
+        class="w-14 h-14 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.4)] flex items-center justify-center text-2xl pointer-events-auto transition-transform hover:scale-110 relative cursor-pointer"
+      >
+        💬
+        <!-- Notification Badge -->
+        <span
+          id="log-badge"
+          class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-900 hidden shadow-md"
+          >0</span
+        >
+      </button>
+    </div>
+
+    <!-- ===================== TEAM CHAT UI (Player-to-Player Messaging) ===================== -->
+    <div
+      class="fixed bottom-6 right-24 md:right-28 z-[200] flex flex-col items-end gap-3 pointer-events-none"
+    >
+      <!-- Chat Panel (Hidden by default) -->
+      <div
+        id="team-chat-panel"
+        class="w-72 md:w-80 bg-slate-900/95 border border-sky-700 rounded-xl shadow-2xl backdrop-blur-md flex flex-col hidden pointer-events-auto transition-all transform origin-bottom-right"
+      >
+        <div
+          class="bg-slate-800 p-3 rounded-t-xl border-b border-sky-700 flex justify-between items-center"
+        >
+          <h3 class="text-xs font-black text-sky-400 tracking-widest">
+            🗨️ TEAM CHAT
+          </h3>
+          <button
+            onclick="toggleTeamChat()"
+            class="text-slate-400 hover:text-white cursor-pointer text-lg leading-none"
+          >
+            &times;
+          </button>
+        </div>
+        <div
+          id="team-chat-content"
+          class="p-3 h-64 overflow-y-auto flex flex-col gap-2 text-[11px] md:text-xs text-slate-300 font-medium scroll-smooth"
+        >
+          <div class="text-center text-[10px] text-slate-500 italic">
+            Chat with the other owners in this room.
+          </div>
+        </div>
+        <div
+          class="p-2 border-t border-sky-700 flex items-center gap-2 bg-slate-800/60 rounded-b-xl"
+        >
+          <input
+            id="team-chat-input"
+            type="text"
+            maxlength="200"
+            placeholder="Type a message..."
+            onkeydown="
+              if (event.key === 'Enter') {
+                sendTeamChatMessage();
+              }
+            "
+            class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-[11px] md:text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
+          />
+          <button
+            onclick="sendTeamChatMessage()"
+            class="w-9 h-9 shrink-0 bg-sky-500 hover:bg-sky-400 text-slate-900 rounded-lg flex items-center justify-center text-sm font-black cursor-pointer transition-transform hover:scale-105"
+          >
+            ➤
+          </button>
+        </div>
+      </div>
+
+      <!-- Floating Chat Button -->
+      <button
+        onclick="toggleTeamChat()"
+        class="w-14 h-14 bg-sky-500 hover:bg-sky-400 text-slate-900 rounded-full shadow-[0_0_15px_rgba(56,189,248,0.5)] flex items-center justify-center text-2xl pointer-events-auto transition-transform hover:scale-110 relative cursor-pointer"
+      >
+        🗨️
+        <!-- Notification Badge -->
+        <span
+          id="chat-badge"
+          class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-slate-900 hidden shadow-md"
+          >0</span
+        >
+      </button>
+    </div>
+    <script>
+      // ===================== SUPABASE CONFIGURATION =====================
+      const SUPABASE_URL = "https://fjlixvcgxjvreevpobvj.supabase.co";
+      const SUPABASE_ANON_KEY =
+        "sb_publishable_jyuHfWm4O5J-k2JVwykzrQ_IzROiKN2";
+      const BUCKET_NAME = "ipl-videos"; // Ensure this matches your exact bucket name
+
+      const { createClient } = supabase;
+      let supabaseClient = null;
+
+      // Prevent script crash if keys are missing
+      try {
+        if (SUPABASE_URL.startsWith("http")) {
+          supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        } else {
+          console.warn(
+            "⚠️ Supabase credentials not set. Add your actual URL and Key to enable videos.",
+          );
+        }
+      } catch (err) {
+        console.error("Supabase Init Error:", err);
+      }
+
+      // Utility to fetch signed URL from private bucket
+      async function getSupabaseSignedUrl(fileName) {
+        if (!supabaseClient) return null;
+        const { data, error } = await supabaseClient.storage
+          .from(BUCKET_NAME)
+          .createSignedUrl(fileName, 300);
+        if (error) {
+          console.error(`Error generating signed URL for ${fileName}:`, error);
+          return null;
+        }
+        return data.signedUrl;
+      }
+
+      let cachedAudioUrl = null;
+      async function getCachedIntroAudioUrl() {
+        if (!supabaseClient) return null;
+        if (cachedAudioUrl) return cachedAudioUrl;
+
+        const { data, error } = await supabaseClient.storage
+          .from(BUCKET_NAME)
+          .createSignedUrl(
+            "ikoliks_aj-motivational-motivation-motivational-music-391969.mp3",
+            3600 * 24,
+          );
+        if (data) cachedAudioUrl = data.signedUrl;
+        return cachedAudioUrl;
+      }
+      // ====================================================================
+
+      function shuffleArray(array, rng) {
+        const rand = rng || Math.random;
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(rand() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+
+      function hashStringToSeed(str) {
+        let h = 1779033703 ^ str.length;
+        for (let i = 0; i < str.length; i++) {
+          h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+          h = (h << 13) | (h >>> 19);
+        }
+        h = Math.imul(h ^ (h >>> 16), 2246822507);
+        h = Math.imul(h ^ (h >>> 13), 3266489909);
+        h ^= h >>> 16;
+        return h >>> 0;
+      }
+
+      function mulberry32(seed) {
+        let t = seed >>> 0;
+        return function () {
+          t |= 0;
+          t = (t + 0x6d2b79f5) | 0;
+          let x = Math.imul(t ^ (t >>> 15), 1 | t);
+          x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+          return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function createSeededRng(seedStr) {
+        return mulberry32(hashStringToSeed(String(seedStr)));
+      }
+
+      const teamsInfo = {
+        MI: { name: "Mumbai Indians", color: "#004ba0" },
+        CSK: { name: "Chennai Super Kings", color: "#ffcb05" },
+        RCB: { name: "Royal Challengers Bengaluru", color: "#ec1c24" },
+        KKR: { name: "Kolkata Knight Riders", color: "#3a225d" },
+        RR: { name: "Rajasthan Royals", color: "#ea1a85" },
+        SRH: { name: "Hyderabad Sunrisers", color: "#ff822a" },
+        DC: { name: "Delhi Capitals", color: "#0078bc" },
+        PBKS: { name: "Punjab Kings", color: "#ed1b24" },
+        LSG: { name: "Lucknow Super Giants", color: "#a72056" },
+        GT: { name: "Gujarat Titans", color: "#1a3a5c" },
+      };
+
+      const videoMapping = {
+        "Virat Kohli": "viratkohli.mp4",
+        "Jasprit Bumrah": " JaspritBumrah .mp4",
+        "Abhishek Sharma": "abhisheksharma.mp4",
+        "Bhuvneshwar Kumar": "BhuvneshwarKumar.mp4",
+        "Hardik Pandya": "hardikpandya .mp4",
+        "Heinrich Klaasen": "heinrichklaasen.mp4",
+        "Ishan Kishan": "IshanKishan.mp4",
+        "Jos Buttler": "JosButtler.mp4",
+        "Josh Hazlewood": "JoshHazelwood.mp4",
+        "KL Rahul": "klrahul.mp4",
+        "Mitchell Starc": "MitchellStarc.mp4",
+        "Mohammed Shami": "MohammadShami.mp4",
+        "Mohammed Siraj": "MohammedSiraj.mp4",
+        "MS Dhoni": "msdhoni.mp4",
+        "Pat Cummins": "PatCummins.mp4",
+        "Ravindra Jadeja": "ravindrajadeja.mp4",
+        "Rohit Sharma": "RohitSharma.mp4",
+        "Sanju Samson": "SanjuSamson.mp4",
+        "Shreyas Iyer": "shreyasiyer.mp4",
+        "Shubman Gill": "ShubmanGill.mp4",
+        "Suryakumar Yadav": "SuryaKumarYadav.mp4",
+        "Kuldeep Yadav": " KuldeepYadav.mp4",
+        "Aiden Markram": "AIDENMARKRAM (1).mp4",
+        "Jofra Archer": "Archer.mp4",
+        "Arshdeep Singh": "ArshadeepSingh (1).mp4",
+        "Axar Patel": "AxarPatel.mp4",
+        "Harshit Rana": "HarshitRana.mp4",
+        "Travis Head": "Head.mp4",
+        "Marcus Stoinis": "MarcusStoinis.mp4",
+        "David Miller": "Miller.mp4",
+        "Phil Salt": "PHILSALT.mp4",
+        "Rajat Patidar": "rajatpatidar.mp4",
+        "Riyan Parag": "Riyan.mp4",
+        "Tim David": "TimDavid.mp4",
+        "Yuzvendra Chahal": "YuzvendraChahal.mp4",
+        "Lockie Ferguson": "lockieferguson.mp4",
+        "Marco Jansen": "MarcoJansen.mp4",
+        "Nicholas Pooran": "NicholasPooran.mp4",
+        "Nitish Kumar Reddy": "NitishKumar.mp4",
+        "Noor Ahmad": "Noors.mp4",
+        "Kagiso Rabada": "Rabada.mp4",
+        "Rashid Khan": "RashidKhan.mp4",
+        "Rinku Singh": "RinkuSingh.mp4",
+        "Rishabh Pant": "RishabhPant.mp4",
+        "Ruturaj Gaikwad": "ruturajgaikwad.mp4",
+        "Sam Curran": "SamCurran1.mp4",
+        "Shimron Hetmyer": "shimranhetmyer.mp4",
+        "Shivam Dube": "ShivamDube.mp4",
+        "Vaibhav Suryavanshi": "vaibhavsuryavan.mp4",
+        "Trent Boult": "TrentBoult.mp4",
+        "Mitchell Marsh": "MitchellMarsh.mp4",
+        "Sunil Narine": "Narine.mp4",
+        "Yashasvi Jaiswal": "Yashasvi.mp4",
+        "Will Jacks": "wiill.mp4",
+        "Jamie Overton": "JamieOverton.mp4",
+        "Jason Holder": "JasonHolder.mp4",
+        "Krunal Pandya": "Krunal.mp4",
+        "Varun Chakravarthy": "Varun.mp4",
+        "Fazalhaq Farooqi": "farooqi.mp4",
+        "Suryansh Shedge": "sshedge.mp4",
+        "Suyash Sharma": "suyashsharma.mp4",
+        "Shahbaz Ahmed": "sadmad.mp4",
+        "Umran Malik": "umranmalik.mp4",
+        "Nitish Rana": "nitheshrana.mp4",
+        "Matt Henry": "matthenry.mp4",
+        "Donovan Ferreira": "dferrorida.mp4",
+        "Manish Pandey": "mpandey.mp4",
+        "Prasidh Krishna": "pradhishkrishna.mp4",
+        "Tilak Varma": "tilak.mp4",
+        "Shivam Mavi": "smavi.mp4",
+        "R. Sai Kishore": "saikishore.mp4",
+        "Lungi Ngidi": "lunginigidi.mp4",
+        "Nathan Ellis": "nattamellis.mp4",
+        "Tushar Deshpande": "Tushar.mp4",
+        "Matheesha Pathirana": "pathirana.mp4",
+        "Ayush Mhatre": "mahtre.mp4",
+        "Ryan Rickelton": "rylerickleton.mp4",
+        "Dhruv Jurel": "djurel.mp4",
+        "Sai Sudharsan": "sai.mp4",
+        "Anukul Roy": "ankulroy.mp4",
+        "Jitesh Sharma": "jithesh.mp4",
+        "Josh Inglis": "inglish.mp4",
+        "Devdutt Padikkal": "padikkal.mp4",
+        "Ajinkya Rahane": "rahana.mp4",
+        "Corbin Bosch": "bosch.mp4",
+        "Jacob Duffy": "duffy.mp4",
+        "Finn Allen": "allen.mp4",
+        "Eshan Malinga": "emalinga.mp4",
+        "Nuwan Thushara": "thusara.mp4",
+        "Anshul Kamboj": "kambhoj.mp4",
+        "Prince Yadav": "prince.mp4",
+        "Spencer Johnson": "johnson.mp4",
+        "Priyansh Arya": "Arya.mp4",
+        "Rahul Tewatia": "TEWATIAmp4.mp4",
+        "Shashank Singh": "ShashankSingh.mp4",
+        "Ishant Sharma": "IshantSharmas.mp4",
+        "Aniket Verma": "AniketVerma.mp4",
+        "Dewald Brevis": "Brevismp4.mp4",
+        "Rasikh Salam": " Rasikh.mp4",
+        "Sandeep Sharma": " SandeepSharma.mp4",
+        "Shahrukh Khan": "Shahrukh Khans.mp4",
+        "Digvesh Rathi": "DigveshSingh.mp4",
+        "Angkrish Raghuvanshi": "AngkrishRaghuvanshis.m4.mp4",
+        "Gerald Coetzee": "GeraldCoetzee.mp4",
+        "Yash Dayal": "dayal.mp4",
+        "Karun Nair": "karunnair.mp4",
+        "Ravi Bishnoi": "ravi.mp4",
+        "Anuj Rawat": "anujrawat.mp4",
+        "Quinton de Kock": "dekock.mp4",
+        "Jayant Yadav": "jayantyadhav.mp4",
+        "Ashutosh Sharma": "ausotosh.mp4",
+        "Deepak Chahar": "deepakchachar.mp4",
+        "Anrich Nortje": "nortje.mp4",
+        "Steve Smith": "SteveSmith.mp4",
+        "Cooper Connolly": "cooperconlly.mp4",
+        "Mustafizur Rahman": "MustafizurRahman.mp4",
+        "Mukesh Kumar": "MukeshKumar.mp4",
+        "George Linde": "lingde.mp4",
+        "Daniel Lawrence": "lawrence.mp4",
+        "Tim Robinson": "TimRobinson.mp4",
+        "Avesh Khan": "AveshKhan.mp4",
+        "Wahidullah Zadran": "WahidullahZadran.mp4",
+        "Alzarri Joseph": "joseph.mp4",
+        "Reeza Hendricks": "hendricks.mp4",
+        "Romario Shepherd": "romio.mp4",
+        "Luke Wood": "lwood.mp4",
+        "Ackeem Auguste": "auguste.mp4",
+        "Vijay Shankar": "vijay.mp4",
+        "Kusal Perera": "kusalperara.mp4",
+        "Shamar Joseph": "sharmarjoseph.mp4",
+        "Nehal Wadhera": "nehal.mp4",
+        "Zak Foulkes": "zakfolkers.mp4",
+        "Ben Dwarshuis": "dwarhsius.mp4",
+        "Saqib Mahmood": "SaqibMahmood.mp4",
+        "Jhye Richardson": "jriheredson.mp4",
+        "Adam Milne": "AdamMilne.mp4",
+        "Sherfane Rutherford": "srutherford.mp4",
+        "Tristan Stubbs": "tstubbus.mp4",
+        "Riley Meredith": "rileymeredith.mp4",
+        "Beau Webster": "BeauWebster.mp4",
+        "Lalit Yadav": "lalit.mp4",
+        "Khaleel Ahmed": "kahmed.mp4",
+        "Deepak Hooda": "DeepakHooda.mp4",
+        "William Sutherland": "wilsutherland.mp4",
+        "Michael Bracewell": "bracewell.mp4",
+        "Naman Dhir": "ndhir.mp4",
+        "T. Natarajan": "natrajan.mp4",
+        "Naveen-ul-Haq": "NaveenUlHaq.mp4",
+        "Richard Gleeson": "glesson.mp4",
+        "Prabhsimran Singh": "prabshimaran.mp4",
+        "Sediqullah Atal": "SediqullahAtal.mp4",
+        "Daniel Sams": "DanielSams.mp4",
+        "Rahul Tripathi": "rahultripathi.mp4",
+        "Rahul Chahar": "rchachar.mp4",
+        "Karthik Sharma": "karthiksharma.mp4",
+        "Tom Curran": "Curran.mp4",
+        "Azmatullah Omarzai": "AzmatullahOmarzai.mp4",
+        "Matthew Short": "mattshort.mp4",
+        "Kyle Jamieson": "KyleJamieson.mp4",
+        "Krishnappa Gowtham": "Krishnappa Gowtham.mp4",
+        "Nishant Sindhu": "nsindhu.mp4",
+        "Tom Banton": "tombaton.mp4",
+        "Gulbadin Naib": "gnalib.mp4",
+        "Pathum Nissanka": "nissanka.mp4",
+        "Kuldeep Sen": "kuldeepsen.mp4",
+        "Akash Deep": "a11.mp4",
+        "Ayush Badoni": "a12.mp4",
+        "Washington Sundar": "washington.mp4",
+        "Kusal Mendis": "KusalMendis.mp4",
+        "Rehan Ahmed": "reshinahmed.mp4",
+        "Prashant Veer": "phasheentveer.mp4",
+        "Mayank Agarwal": "mayankagarwal.mp4",
+        "Cameron Green": "camrrongreen.mp4",
+        "William O'Rourke": "williamo.mp4",
+        "Shai Hope": "shaihope.mp4",
+        "Moeen Ali": "moheenali.mp4",
+        "Glenn Phillips": "gphillis.mp4",
+        "Tim Seifert": "timseifert.mp4",
+        "Chetan Sakariya": "chetan.mp4",
+        "Daryl Mitchell": "dmictechll.mp4",
+        "Jordan Cox": "jcox.mp4",
+        "Abdul Samad": "abdulsamad.mp4",
+        "Abhinandan Singh": "abinaman.mp4",
+        "Abhishek Porel": "abishekporel.mp4",
+        "Ajay Mandal": "ajaymandal.mp4",
+        "Akash Singh": "akashsingh.mp4",
+        "Arjun Tendulkar": "arjuntndulkar.mp4",
+        "Ashwani Kumar": "ashwini.mp4",
+        "Gurjapneet Singh": "gurjapeet.mp4",
+        "Gurnoor Brar": "gurnoor.mp4",
+        "Harnoor Pannu": "harnoorpannu.mp4",
+        "Harsh Dubey": "harshdubey.mp4",
+        "Himmat Singh": "himmant.mp4",
+        "Kumar Kushagra": "kumar.mp4",
+        "Kwena Maphaka": "makapa.mp4",
+        "Lhuan-Dre Pretorius": "lpretorious.mp4",
+        "Madhav Tiwari": "madhav.mp4",
+        "Manav Suthar": "manarsudhar.mp4",
+        "Mayank Markande": "mayankmarkande.mp4",
+        "Mohd. Arshad Khan": "arsdhadkhan.mp4",
+        "Mohsin Khan": "moshinkhan.mp4",
+        "Mukesh Choudhary": "mukulchodhury.mp4",
+        "Musheer Khan": "musheerkhan.mp4",
+        "Raghu Sharma": "raghushama.mp4",
+        "Raj Angad Bawa": "rajbawa.mp4",
+        "Ramakrishna Ghosh": "ramakrishna.mp4",
+        "Ramandeep Singh": "ramandeep.mp4",
+        "Robin Minz": "robinminz.mp4",
+        "Shreyas Gopal": "sgopal.mp4",
+        "Shubham Dubey": "submandubey.mp4",
+        "Smaran Ravichandaran": "smaran.mp4",
+        "Swapnil Singh": "swapnil.mp4",
+        "Tripurana Vijay": "tvijay.mp4",
+        "Urvil Patel": "urvil.mp4",
+        "Vaibhav Arora": "vaibhavarora.mp4",
+        "Vipraj Nigam": "vipraj.mp4",
+        "Vishnu Vinod": "vishnu.mp4",
+        "Vyshak Vijaykumar": "vyshak.mp4",
+        "Yash Thakur": "yash.mp4",
+        "Yudhvir Charak": "yudik.mp4",
+        "Zeeshan Ansari": "zeeham.mp4",
+      };
+
+      const rawSetsData = [
+        `Rajat Patidar|BATSMAN|200
+             Vaibhav Sooryavanshi|BATSMAN|200
+             Krunal Pandya|ALL-ROUNDER|200
+      Abhishek Sharma|ALL-ROUNDER|200
+      Riyan Parag|ALL-ROUNDER|200
+      Jason Holder|ALL-ROUNDER|200
+      Jamie Overton|ALL -ROUNDER|200
+      Aiden Markram|BATSMAN|200
+      Arshdeep Singh|BOWLER|200
+      Axar Patel|ALL-ROUNDER|200
+      Bhuvneshwar Kumar|BOWLER|200
+      Hardik Pandya|ALL-ROUNDER|200
+      Harshit Rana|BOWLER|100
+      Heinrich Klaasen|WICKETKEEPER|200
+      Ishan Kishan|WICKETKEEPER|200
+      Jasprit Bumrah|BOWLER|200
+      Jos Buttler|WICKETKEEPER|200
+      Josh Hazlewood|BOWLER|200
+      Kagiso Rabada|BOWLER|200
+      KL Rahul|WICKETKEEPER|200
+      Kuldeep Yadav|BOWLER|200
+      Lockie Ferguson|BOWLER|200
+      Marco Jansen|ALL-ROUNDER|200
+      Marcus Stoinis|ALL-ROUNDER|200
+      Mitchell Marsh|ALL-ROUNDER|200
+      Mitchell Starc|BOWLER|200
+      Mohammed Shami|BOWLER|200
+      Mohammed Siraj|BOWLER|200
+      MS Dhoni|WICKETKEEPER|200
+      Nicholas Pooran|WICKETKEEPER|200
+      Nitish Kumar Reddy|ALL-ROUNDER|100
+      Noor Ahmad|BOWLER|200
+      Pat Cummins|BOWLER|200
+      Phil Salt|WICKETKEEPER|200
+      Rashid Khan|BOWLER|200
+      Ravindra Jadeja|ALL-ROUNDER|200
+      Rinku Singh|BATSMAN|200
+      Rishabh Pant|WICKETKEEPER|200
+      Rohit Sharma|BATSMAN|200
+      Ruturaj Gaikwad|BATSMAN|200
+      Sam Curran|ALL-ROUNDER|200
+      Sanju Samson|WICKETKEEPER|200
+      Shimron Hetmyer|BATSMAN|200
+      Shivam Dube|ALL-ROUNDER|200
+      Shreyas Iyer|BATSMAN|200
+      Shubman Gill|BATSMAN|200
+      Sunil Narine|ALL-ROUNDER|200
+      Suryakumar Yadav|BATSMAN|200
+      Tim David|BATSMAN|200
+      Travis Head|BATSMAN|200
+      Trent Boult|BOWLER|200
+      Varun Chakravarthy|BOWLER|200
+      Virat Kohli|BATSMAN|200
+      Will Jacks|ALL-ROUNDER|200
+      Yashasvi Jaiswal|BATSMAN|200
+      Yuzvendra Chahal|BOWLER|200`,
+
+        `Ajinkya Rahane|BATSMAN|100
+      Devdutt Padikkal|BATSMAN|100
+      Ishant Sharma|BOWLER|100
+      Jayant Yadav|ALL-ROUNDER|100
+      Jitesh Sharma|WICKETKEEPER|100
+      Karun Nair|BATSMAN|100
+      Manish Pandey|BATSMAN|100
+      R. Sai Kishore|BOWLER|100
+      Sandeep Sharma|BOWLER|100
+      Shahbaz Ahmed|ALL-ROUNDER|100
+      Shahrukh Khan|BATSMAN|100
+      Tushar Deshpande|BOWLER|100
+      Umran Malik|BOWLER|100
+      Yash Dayal|BOWLER|100
+      Akash Deep|BOWLER|100
+      Shivam Mavi|BOWLER|100
+      Ravi Bishnoi|BOWLER|100
+      Ayush Mhatre|BATSMAN|100
+      Sai Sudharsan|BATSMAN|200
+      Digvesh Rathi|BOWLER|100
+      Rasikh Salam|BOWLER|100
+      Sameer Rizvi|BATSMAN|100
+      Shashank Singh|ALL-ROUNDER|100
+      Suryansh Shedge|ALL-ROUNDER|100
+      Suyash Sharma|BOWLER|100
+      Angkrish Raghuvanshi|BATSMAN|100
+      Aniket Verma|BATSMAN|100
+      Anshul Kamboj|BOWLER|100
+      Anuj Rawat|WICKETKEEPER|100
+      Anukul Roy|ALL-ROUNDER|100
+      Prince Yadav|BOWLER|100
+      Priyansh Arya|BATSMAN|100
+      Ashutosh Sharma|BATSMAN|100
+      Nitish Rana|BATSMAN|75
+      Rahul Tewatia|ALL-ROUNDER|75
+      Gerald Coetzee|BOWLER|200
+      Jacob Duffy|BOWLER|200
+      Deepak Chahar|BOWLER|200
+      Prasidh Krishna|BOWLER|200
+      Fazalhaq Farooqi|BOWLER|200
+      Matt Henry|BOWLER|200
+      Spencer Johnson|BOWLER|200
+      Anrich Nortje|BOWLER|200
+      Matheesha Pathirana|BOWLER|200
+      Finn Allen|WICKETKEEPER|200
+      Quinton de Kock|WICKETKEEPER|200
+      Donovan Ferreira|WICKETKEEPER|200
+      Eshan Malinga|BOWLER|200
+      Josh Inglis|WICKETKEEPER|200
+      Corbin Bosch|ALL-ROUNDER|75
+      Lungi Ngidi|BOWLER|200
+      Dewald Brevis|BATSMAN|75
+      Tilak Varma|BATSMAN|200
+      Dhruv Jurel|WICKET-KEEPER|200
+      Nathan Ellis|BOWLER|75
+      Nuwan Thushara|BOWLER|75
+      Washington Sundar|ALL-ROUNDER|200
+      Ryan Rickelton|WICKETKEEPER|75`,
+
+        `Mayank Agarwal|BATSMAN|75
+      Rahul Tripathi|BATSMAN|75
+      Navdeep Saini|BOWLER|75
+      Mukesh Kumar|BOWLER|100
+      Rahul Chahar|BOWLER|100
+      Vijay Shankar|ALL-ROUNDER|200
+
+      Deepak Hooda|ALL-ROUNDER|200
+
+      Krishnappa Gowtham|ALL-ROUNDER|200
+
+      Lalit Yadav|ALL-ROUNDER|100
+
+      Romario Shepherd|ALL-ROUNDER|200
+
+      Moeen Ali|ALL-ROUNDER|200
+
+      David Miller|BATSMAN|200
+
+      Glenn Phillips|ALL-ROUNDER|200
+
+      Sherfane Rutherford|BATSMAN|200
+
+      Azmatullah Omarzai|ALL-ROUNDER|200
+
+      Mahipal Lomror|ALL-ROUNDER|200
+
+      Khaleel Ahmed|BOWLER|200
+
+      Avesh Khan|BOWLER|200
+      Kartik Tyagi|BOWLER|100
+      Karthik Sharma|WICKET-KEEPER|200
+      Prashant Veer|ALL-ROUNDER|200
+
+      T. Natarajan|BOWLER|200
+      Chetan Sakariya|BOWLER|75
+      Kuldeep Sen|BOWLER|75
+      Ackeem Auguste|BATSMAN|75
+      Pathum Nissanka|BATSMAN|75
+      Reeza Hendricks|BATSMAN|100
+      Sediqullah Atal|BATSMAN|75
+      Steve Smith|BATSMAN|200
+      Tim Robinson|BATSMAN|75
+      Benjamin McDermott|BATSMAN|75
+
+      Jordan Cox|WICKETKEEPER|75
+      Kusal Mendis|WICKETKEEPER|75
+      Tristan Stubbs|WICKET-KEEPER|200
+
+      Cameron Green|ALL-ROUNDER|200
+      Kusal Perera|WICKETKEEPER|100
+      Shai Hope|WICKETKEEPER|200
+      Tim Seifert|WICKETKEEPER|150
+      Tom Banton|WICKETKEEPER|200
+      Beau Webster|ALL-ROUNDER|125
+      Bevon-John Jacobs|ALL-ROUNDER|75
+      Cooper Connolly|ALL-ROUNDER|200
+      Daniel Lawrence|ALL-ROUNDER|200
+      George Linde|ALL-ROUNDER|100
+      Gulbadin Naib|ALL-ROUNDER|100
+      Rehan Ahmed|ALL-ROUNDER|75
+      Tom Curran|ALL-ROUNDER|200
+      William Sutherland|ALL-ROUNDER|100
+      Ben Dwarshuis|ALL-ROUNDER|200
+      Matthew Short|ALL-ROUNDER|150
+      Michael Bracewell|ALL-ROUNDER|200
+      Sean Abbott|ALL-ROUNDER|200
+      Zak Foulkes|ALL-ROUNDER|75
+      Daniel Sams|ALL-ROUNDER|100
+      Daryl Mitchell|ALL-ROUNDER|200
+      Alzarri Joseph|BOWLER|200
+      Naman Dhir|ALL-ROUNDER|50
+      Nehal Wadhera|BATSMAN|50
+      Nishant Sindhu|ALL-ROUNDER|50
+      Prabhsimran Singh|WICKETKEEPER|50
+      Adam Milne|BOWLER|200
+      Jhye Richardson|BOWLER|150
+      Luke Wood|BOWLER|75
+      Naveen-ul-Haq|BOWLER|200
+      Richard Gleeson|BOWLER|75
+      Riley Meredith|BOWLER|150
+      Shamar Joseph|BOWLER|75
+      Taskin Ahmed|BOWLER|200
+      Kyle Jamieson|BOWLER|200
+
+      Mustafizur Rahman|BOWLER|200
+      Saqib Mahmood|BOWLER|150
+      William O'Rourke|BOWLER|200
+      Wahidullah Zadran|BOWLER|30`,
+
+        `Abdul Samad|ALL-ROUNDER|50
+      Abhinandan Singh|BOWLER|50
+      Abhishek Porel|WICKETKEEPER|50
+      Ajay Mandal|ALL-ROUNDER|50
+      Akash Singh|BOWLER|50
+      Arjun Tendulkar|ALL-ROUNDER|50
+      Arshin Kulkarni|ALL-ROUNDER|50
+      Ashwani Kumar|BOWLER|50
+      Ayush Badoni|ALL-ROUNDER|50
+      Gurjapneet Singh|BOWLER|50
+      Gurnoor Brar|BOWLER|50
+      Harnoor Pannu|BATSMAN|50
+      Harpreet Brar|ALL-ROUNDER|50
+      Harsh Dubey|ALL-ROUNDER|50
+      Himmat Singh|BATSMAN|50
+      Kumar Kushagra|WICKETKEEPER|50
+      M. Siddharth|BOWLER|50
+      Madhav Tiwari|ALL-ROUNDER|50
+      Manav Suthar|ALL-ROUNDER|50
+      Mayank Markande|BOWLER|50
+      Mohd. Arshad Khan|ALL-ROUNDER|50
+      Mohsin Khan|BOWLER|50
+      Mukesh Choudhary|BOWLER|50
+      Musheer Khan|ALL-ROUNDER|50
+
+      Pyla Avinash|BATSMAN|50
+      Raghu Sharma|BOWLER|50
+      Raj Angad Bawa|ALL-ROUNDER|50
+      Ramakrishna Ghosh|ALL-ROUNDER|50
+      Ramandeep Singh|ALL-ROUNDER|50
+      Robin Minz|WICKETKEEPER|50
+      Shreyas Gopal|ALL-ROUNDER|50
+      Shubham Dubey|BATSMAN|50
+      Smaran Ravichandaran|BATSMAN|50
+      Swapnil Singh|ALL-ROUNDER|50
+      Tripurana Vijay|BOWLER|50
+      Urvil Patel|WICKETKEEPER|50
+      Vaibhav Arora|BOWLER|50
+
+      Vipraj Nigam|ALL-ROUNDER|50
+      Vishnu Vinod|WICKETKEEPER|50
+      Vyshak Vijaykumar|BOWLER|50
+      Yash Thakur|BOWLER|50
+      Yudhvir Charak|BOWLER|50
+      Zeeshan Ansari|BOWLER|50
+      Kwena Maphaka|BOWLER|50
+      Lhuan-Dre Pretorius|WICKETKEEPER|50`,
+      ];
+
+      const playerStatsDatabase = {
+        "Virat Kohli": {
+          matches: 267,
+          metric: "8661 Runs",
+          sr: "131.97 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Rohit Sharma": {
+          matches: 257,
+          metric: "6628 Runs",
+          sr: "131.14 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Steve Smith": {
+          matches: 103,
+          metric: "2485 Runs",
+          sr: "128.09 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Cooper Connolly": {
+          matches: 14,
+          metric: "491 Runs",
+          sr: "163.12 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Mustafizur Rahman": {
+          matches: 57,
+          metric: "61 Wickets",
+          sr: "8.08",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mukesh Kumar": {
+          matches: 42,
+          metric: "42 Wickets",
+          sr: "10.59",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "George Linde": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Benjamin McDermott": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Daniel Lawrence": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Tim Robinson": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Abdul Samad": {
+          matches: 50,
+          metric: "577 Runs",
+          sr: "146.07 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Abhinandan Singh": {
+          matches: 3,
+          metric: "2 Wickets",
+          sr: "9.50 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Abhishek Porel": {
+          matches: 31,
+          metric: "661 Runs",
+          sr: "149.88 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ajay Mandal": {
+          matches: 1,
+          metric: "0 Wickets",
+          sr: "0.00 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Akash Singh": {
+          matches: 7,
+          metric: "5 Wickets",
+          sr: "9.89 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Arjun Tendulkar": {
+          matches: 4,
+          metric: "3 Wickets",
+          sr: "9.30 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Arshin Kulkarni": {
+          matches: 2,
+          metric: "9 Runs",
+          sr: "75.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ashwani Kumar": {
+          matches: 14,
+          metric: "18 Wickets",
+          sr: "8.20 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Ayush Badoni": {
+          matches: 42,
+          metric: "893 Runs",
+          sr: "134.23 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Gurjapneet Singh": {
+          matches: 7,
+          metric: "3 Wickets",
+          sr: "9.16 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Gurnoor Brar": {
+          matches: 1,
+          metric: "0 Wickets",
+          sr: "15.00 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Harnoor Pannu": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Harpreet Brar": {
+          matches: 41,
+          metric: "25 Wickets",
+          sr: "7.91 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Harsh Dubey": {
+          matches: 13,
+          metric: "15 Wickets",
+          sr: "8.80 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Himmat Singh": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Kumar Kushagra": {
+          matches: 4,
+          metric: "3 Runs",
+          sr: "60.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Kwena Maphaka": {
+          matches: 2,
+          metric: "1 Wickets",
+          sr: "14.14 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Lhuan-Dre Pretorius": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "M. Siddharth": {
+          matches: 5,
+          metric: "2 Wickets",
+          sr: "8.50 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Madhav Tiwari": {
+          matches: 3,
+          metric: "4 Wickets",
+          sr: "8.50 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Manav Suthar": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mayank Markande": {
+          matches: 38,
+          metric: "31 Wickets",
+          sr: "8.54 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mohd. Arshad Khan": {
+          matches: 9,
+          metric: "6 Wickets",
+          sr: "10.45 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mohsin Khan": {
+          matches: 24,
+          metric: "27 Wickets",
+          sr: "8.44 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mukesh Choudhary": {
+          matches: 14,
+          metric: "16 Wickets",
+          sr: "9.58 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Musheer Khan": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Pyla Avinash": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Raghu Sharma": {
+          matches: 5,
+          metric: "1 Wickets",
+          sr: "8.67 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Raj Angad Bawa": {
+          matches: 2,
+          metric: "11 Runs",
+          sr: "110.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ramakrishna Ghosh": {
+          matches: 1,
+          metric: "1 Wickets",
+          sr: "8.00 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Ramandeep Singh": {
+          matches: 20,
+          metric: "170 Runs",
+          sr: "173.46 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Robin Minz": {
+          matches: 4,
+          metric: "12 Runs",
+          sr: "63.16 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Shreyas Gopal": {
+          matches: 49,
+          metric: "49 Wickets",
+          sr: "8.11 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Shubham Dubey": {
+          matches: 5,
+          metric: "49 Runs",
+          sr: "119.51 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Smaran Ravichandaran": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Swapnil Singh": {
+          matches: 12,
+          metric: "7 Wickets",
+          sr: "8.95 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Tripurana Vijay": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Urvil Patel": {
+          matches: 10,
+          metric: "197 Runs",
+          sr: "205.21 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Vaibhav Arora": {
+          matches: 15,
+          metric: "16 Wickets",
+          sr: "9.31 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Vipraj Nigam": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Vishnu Vinod": {
+          matches: 6,
+          metric: "37 Runs",
+          sr: "115.62 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Vyshak Vijaykumar": {
+          matches: 11,
+          metric: "13 Wickets",
+          sr: "10.26 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Yash Thakur": {
+          matches: 22,
+          metric: "27 Wickets",
+          sr: "9.15 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Yudhvir Charak": {
+          matches: 5,
+          metric: "4 Wickets",
+          sr: "9.73 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Zeeshan Ansari": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Avesh Khan": {
+          matches: 63,
+          metric: "74 Wickets",
+          sr: "8.86",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Romario Shepherd": {
+          matches: 10,
+          metric: "149 Runs",
+          sr: "150.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Wahidullah Zadran": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Alzarri Joseph": {
+          matches: 22,
+          metric: "21 Wickets",
+          sr: "9.53",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Reeza Hendricks": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Kartik Tyagi": {
+          matches: 23,
+          metric: "15 Wickets",
+          sr: "9.98",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Luke Wood": {
+          matches: 2,
+          metric: "1 Wicket",
+          sr: "12.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Ackeem Auguste": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Vijay Shankar": {
+          matches: 72,
+          metric: "1110 Runs",
+          sr: "132.30 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Kusal Perera": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Shamar Joseph": {
+          matches: 1,
+          metric: "0 Wickets",
+          sr: "11.75",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Nehal Wadhera": {
+          matches: 44,
+          metric: "784 Runs",
+          sr: "140.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Zak Foulkes": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Ben Dwarshuis": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Saqib Mahmood": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Jhye Richardson": {
+          matches: 3,
+          metric: "3 Wickets",
+          sr: "10.63",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Adam Milne": {
+          matches: 10,
+          metric: "7 Wickets",
+          sr: "9.62",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Sherfane Rutherford": {
+          matches: 10,
+          metric: "106 Runs",
+          sr: "135.90 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Tristan Stubbs": {
+          matches: 46,
+          metric: "980 Runs",
+          sr: "151.23 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Riley Meredith": {
+          matches: 13,
+          metric: "12 Wickets",
+          sr: "9.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Beau Webster": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Lalit Yadav": {
+          matches: 27,
+          metric: "305 Runs",
+          sr: "105.90 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Khaleel Ahmed": {
+          matches: 76,
+          metric: "91 Wickets",
+          sr: "8.96",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Deepak Hooda": {
+          matches: 118,
+          metric: "1395 Runs",
+          sr: "128.57 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "William Sutherland": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Michael Bracewell": {
+          matches: 5,
+          metric: "6 Wickets",
+          sr: "8.66",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Navdeep Saini": {
+          matches: 32,
+          metric: "23 Wickets",
+          sr: "8.87",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Naman Dhir": {
+          matches: 37,
+          metric: "710 Runs",
+          sr: "163.97 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "T. Natarajan": {
+          matches: 61,
+          metric: "68 Wickets",
+          sr: "8.76",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Naveen-ul-Haq": {
+          matches: 18,
+          metric: "25 Wickets",
+          sr: "8.44",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Richard Gleeson": {
+          matches: 2,
+          metric: "1 Wicket",
+          sr: "10.20",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Taskin Ahmed": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Prabhsimran Singh": {
+          matches: 82,
+          metric: "2206 Runs",
+          sr: "153.94 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Sediqullah Atal": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Daniel Sams": {
+          matches: 16,
+          metric: "14 Wickets",
+          sr: "8.72",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Rahul Tripathi": {
+          matches: 95,
+          metric: "2236 Runs",
+          sr: "139.05 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Rahul Chahar": {
+          matches: 78,
+          metric: "75 Wickets",
+          sr: "7.75",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Tom Curran": {
+          matches: 13,
+          metric: "13 Wickets",
+          sr: "10.84",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Azmatullah Omarzai": {
+          matches: 19,
+          metric: "15 Wickets",
+          sr: "9.63",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Bevon-John Jacobs": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Matthew Short": {
+          matches: 9,
+          metric: "177 Runs",
+          sr: "123.78 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Kyle Jamieson": {
+          matches: 15,
+          metric: "16 Wickets",
+          sr: "10.12",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Krishnappa Gowtham": {
+          matches: 36,
+          metric: "21 Wickets",
+          sr: "8.24",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Nishant Sindhu": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Tom Banton": {
+          matches: 2,
+          metric: "18 Runs",
+          sr: "90.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Sean Abbott": {
+          matches: 3,
+          metric: "1 Wicket",
+          sr: "11.77",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mahipal Lomror": {
+          matches: 40,
+          metric: "527 Runs",
+          sr: "141.29 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Gulbadin Naib": {
+          matches: 2,
+          metric: "0 Wickets",
+          sr: "10.50",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Pathum Nissanka": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Kuldeep Sen": {
+          matches: 12,
+          metric: "14 Wickets",
+          sr: "9.63",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Rehan Ahmed": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Kusal Mendis": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Prashant Veer": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Mayank Agarwal": {
+          matches: 127,
+          metric: "2661 Runs",
+          sr: "133.05 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Cameron Green": {
+          matches: 29,
+          metric: "707 Runs",
+          sr: "152.04 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "William O'Rourke": {
+          matches: 0,
+          metric: "0 Wickets",
+          sr: "0.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Shai Hope": {
+          matches: 9,
+          metric: "183 Runs",
+          sr: "128.87 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "David Miller": {
+          matches: 152,
+          metric: "3288 Runs",
+          sr: "139.50 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Moeen Ali": {
+          matches: 67,
+          metric: "1162 Runs",
+          sr: "142.58 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Glenn Phillips": {
+          matches: 8,
+          metric: "65 Runs",
+          sr: "112.07 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Tim Seifert": {
+          matches: 3,
+          metric: "26 Runs",
+          sr: "108.33 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Chetan Sakariya": {
+          matches: 19,
+          metric: "20 Wickets",
+          sr: "8.44",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Daryl Mitchell": {
+          matches: 15,
+          metric: "351 Runs",
+          sr: "140.40 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Jordan Cox": {
+          matches: 0,
+          metric: "0 Runs",
+          sr: "0.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Karthik Sharma": {
+          matches: 11,
+          metric: "295 Runs",
+          sr: "136.57 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Priyansh Arya": {
+          matches: 31,
+          metric: "839 Runs",
+          sr: "191.99 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Rahul Tewatia": {
+          matches: 124,
+          metric: "1302 Runs",
+          sr: "138.07 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Shashank Singh": {
+          matches: 53,
+          metric: "905 Runs",
+          sr: "161.61 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ishant Sharma": {
+          matches: 117,
+          metric: "96 Wickets",
+          sr: "8.38",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Aniket Verma": {
+          matches: 24,
+          metric: "315 Runs",
+          sr: "160.71 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Dewald Brevis": {
+          matches: 27,
+          metric: "606 Runs",
+          sr: "146.02 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Sandeep Sharma": {
+          matches: 143,
+          metric: "151 Wickets",
+          sr: "8.16",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Rasikh Salam": {
+          matches: 25,
+          metric: "29 Wickets",
+          sr: "10.01",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Shahrukh Khan": {
+          matches: 64,
+          metric: "775 Runs",
+          sr: "147.90 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Josh Inglis": {
+          matches: 16,
+          metric: "544 Runs",
+          sr: "173.25 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Digvesh Rathi": {
+          matches: 22,
+          metric: "19 Wickets",
+          sr: "8.94",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Angkrish Raghuvanshi": {
+          matches: 35,
+          metric: "885 Runs",
+          sr: "145.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Gerald Coetzee": {
+          matches: 14,
+          metric: "15 Wickets",
+          sr: "10.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Akash Deep": {
+          matches: 14,
+          metric: "10 Wickets",
+          sr: "11.83",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Yash Dayal": {
+          matches: 43,
+          metric: "41 Wickets",
+          sr: "9.58",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Karun Nair": {
+          matches: 86,
+          metric: "1712 Runs",
+          sr: "131.29 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ravi Bishnoi": {
+          matches: 86,
+          metric: "83 Wickets",
+          sr: "8.36",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Sameer Rizvi": {
+          matches: 8,
+          metric: "95 Runs",
+          sr: "142.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Corbin Bosch": {
+          matches: 9,
+          metric: "13 Wickets",
+          sr: "9.20",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Anuj Rawat": {
+          matches: 24,
+          metric: "318 Runs",
+          sr: "119.10 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Quinton de Kock": {
+          matches: 118,
+          metric: "3441 Runs",
+          sr: "134.94 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Jayant Yadav": {
+          matches: 20,
+          metric: "8 Wickets",
+          sr: "6.85",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Ashutosh Sharma": {
+          matches: 32,
+          metric: "564 Runs",
+          sr: "168.86 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Deepak Chahar": {
+          matches: 103,
+          metric: "96 Wickets",
+          sr: "8.30",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Anrich Nortje": {
+          matches: 49,
+          metric: "61 Wickets",
+          sr: "9.09",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Fazalhaq Farooqi": {
+          matches: 4,
+          metric: "4 Wickets",
+          sr: "9.78",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Shahbaz Ahmed": {
+          matches: 63,
+          metric: "603 Runs",
+          sr: "123.31 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Suyash Sharma": {
+          matches: 39,
+          metric: "27 Wickets",
+          sr: "8.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Umran Malik": {
+          matches: 26,
+          metric: "29 Wickets",
+          sr: "9.40",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Nitish Rana": {
+          matches: 105,
+          metric: "2570 Runs",
+          sr: "134.20 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Matt Henry": {
+          matches: 9,
+          metric: "8 Wickets",
+          sr: "8.38",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Donovan Ferreira": {
+          matches: 18,
+          metric: "326 Runs",
+          sr: "170.68 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Manish Pandey": {
+          matches: 170,
+          metric: "3808 Runs",
+          sr: "120.97 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Prasidh Krishna": {
+          matches: 78,
+          metric: "78 Wickets",
+          sr: "8.99",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Tilak Varma": {
+          matches: 55,
+          metric: "1520 Runs",
+          sr: "141.50 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Shivam Mavi": {
+          matches: 32,
+          metric: "30 Wickets",
+          sr: "8.71",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "R. Sai Kishore": {
+          matches: 28,
+          metric: "33 Wickets",
+          sr: "8.99",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Lungi Ngidi": {
+          matches: 28,
+          metric: "42 Wickets",
+          sr: "8.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Nathan Ellis": {
+          matches: 17,
+          metric: "19 Wickets",
+          sr: "8.67",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Tushar Deshpande": {
+          matches: 36,
+          metric: "42 Wickets",
+          sr: "9.80",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Matheesha Pathirana": {
+          matches: 33,
+          metric: "47 Wickets",
+          sr: "8.66",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Ayush Mhatre": {
+          matches: 13,
+          metric: "441 Runs",
+          sr: "145.50 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ryan Rickelton": {
+          matches: 26,
+          metric: "836 Runs",
+          sr: "168.21 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Dhruv Jurel": {
+          matches: 58,
+          metric: "1195 Runs",
+          sr: "154.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Sai Sudharsan": {
+          matches: 57,
+          metric: "2515 Runs",
+          sr: "149.17 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Anukul Roy": {
+          matches: 14,
+          metric: "10 Wickets",
+          sr: "8.25",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Washington Sundar": {
+          matches: 60,
+          metric: "38 Wickets",
+          sr: "7.65",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Jitesh Sharma": {
+          matches: 40,
+          metric: "730 Runs",
+          sr: "151.76 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Devdutt Padikkal": {
+          matches: 61,
+          metric: "1559 Runs",
+          sr: "123.63 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ajinkya Rahane": {
+          matches: 185,
+          metric: "4600 Runs",
+          sr: "123.42 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Corbin Bosch": {
+          matches: 9,
+          metric: "13 Wickets",
+          sr: "9.20",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Jacob Duffy": {
+          matches: 6,
+          metric: "9 Wickets",
+          sr: "8.60",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Finn Allen": {
+          matches: 11,
+          metric: "349 Runs",
+          sr: "155.10 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Eshan Malinga": {
+          matches: 22,
+          metric: "33 Wickets",
+          sr: "8.90",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Nuwan Thushara": {
+          matches: 8,
+          metric: "9 Wickets",
+          sr: "9.43",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Anshul Kamboj": {
+          matches: 25,
+          metric: "31 Wickets",
+          sr: "9.97",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Prince Yadav": {
+          matches: 20,
+          metric: "19 Wickets",
+          sr: "8.50",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Spencer Johnson": {
+          matches: 12,
+          metric: "7 Wickets",
+          sr: "10.33",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Angkrish Raghuvanshi": {
+          matches: 35,
+          metric: "885 Runs",
+          sr: "145.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Gerald Coetzee": {
+          matches: 14,
+          metric: "15 Wickets",
+          sr: "10.00",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Akash Deep": {
+          matches: 14,
+          metric: "10 Wickets",
+          sr: "11.83",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Yash Dayal": {
+          matches: 43,
+          metric: "41 Wickets",
+          sr: "9.58",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Karun Nair": {
+          matches: 86,
+          metric: "1712 Runs",
+          sr: "131.29 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ravi Bishnoi": {
+          matches: 86,
+          metric: "83 Wickets",
+          sr: "8.36",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Sameer Rizvi": {
+          matches: 8,
+          metric: "95 Runs",
+          sr: "142.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Corbin Bosch": {
+          matches: 9,
+          metric: "13 Wickets",
+          sr: "9.20",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Anuj Rawat": {
+          matches: 24,
+          metric: "318 Runs",
+          sr: "119.10 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Quinton de Kock": {
+          matches: 118,
+          metric: "3441 Runs",
+          sr: "134.94 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Jayant Yadav": {
+          matches: 20,
+          metric: "8 Wickets",
+          sr: "6.85",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Ashutosh Sharma": {
+          matches: 32,
+          metric: "564 Runs",
+          sr: "168.86 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Deepak Chahar": {
+          matches: 103,
+          metric: "96 Wickets",
+          sr: "8.30",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Anrich Nortje": {
+          matches: 49,
+          metric: "61 Wickets",
+          sr: "9.09",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Suryansh Shedge": {
+          matches: 5,
+          metric: "65 Runs",
+          sr: "130.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Mohammed Siraj": {
+          matches: 125,
+          metric: "117 Wickets",
+          sr: "9.06",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mohammed Shami": {
+          matches: 132,
+          metric: "145 Wickets",
+          sr: "8.63",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Noor Ahmad": {
+          matches: 51,
+          metric: "61 Wickets",
+          sr: "8.17",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Nitish Kumar Reddy": {
+          matches: 42,
+          metric: "787 Runs",
+          sr: "145.47 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Marco Jansen": {
+          matches: 48,
+          metric: "45 Wickets",
+          sr: "9.63",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Sam Curran": {
+          matches: 64,
+          metric: "997 Runs",
+          sr: "136.39 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Mitchell Starc": {
+          matches: 58,
+          metric: "76 Wickets",
+          sr: "8.79",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Tim David": {
+          matches: 66,
+          metric: "1151 Runs",
+          sr: "177.08 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Yashasvi Jaiswal": {
+          matches: 83,
+          metric: "2593 Runs",
+          sr: "152.80 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Abhishek Sharma": {
+          matches: 92,
+          metric: "2379 Runs",
+          sr: "171.27 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Rajat Patidar": {
+          matches: 52,
+          metric: "1612 Runs",
+          sr: "164.49 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Riyan Parag": {
+          matches: 98,
+          metric: "1875 Runs",
+          sr: "142.10 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Jason Holder": {
+          matches: 57,
+          metric: "70 Wickets",
+          sr: "8.58 Econ",
+          label1: "Wickets",
+          label2: "Economy Rate",
+        },
+        "Sai Sudharsan": {
+          matches: 57,
+          metric: "2515 Runs",
+          sr: "149.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Kartik Tyagi": {
+          matches: 34,
+          metric: "33 Wickets",
+          sr: "22.06 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Karthik Sharma": {
+          matches: 11,
+          metric: "295 Runs",
+          sr: "136.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Prashant Veer": {
+          matches: 6,
+          metric: "90 Runs",
+          sr: "134.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Jamie Overton": {
+          matches: 13,
+          metric: "14 Wickets",
+          sr: "9.76 Econ",
+          label1: "Wickets",
+          label2: "Economy Rate",
+        },
+        "Vaibhav Sooryavanshi": {
+          matches: 23,
+          metric: "1028 Runs",
+          sr: "228.95 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Rohit Sharma": {
+          matches: 257,
+          metric: "6628 Runs",
+          sr: "131.14 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Suryakumar Yadav": {
+          matches: 150,
+          metric: "3594 Runs",
+          sr: "145.33 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Shubman Gill": {
+          matches: 103,
+          metric: "3216 Runs",
+          sr: "135.70 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Shreyas Iyer": {
+          matches: 115,
+          metric: "3127 Runs",
+          sr: "127.48 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ruturaj Gaikwad": {
+          matches: 66,
+          metric: "2380 Runs",
+          sr: "136.87 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Rinku Singh": {
+          matches: 45,
+          metric: "893 Runs",
+          sr: "143.34 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Travis Head": {
+          matches: 53,
+          metric: "1556 Runs",
+          sr: "170.05 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Aiden Markram": {
+          matches: 46,
+          metric: "995 Runs",
+          sr: "129.89 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "David Miller": {
+          matches: 135,
+          metric: "2924 Runs",
+          sr: "138.76 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Tristan Stubbs": {
+          matches: 48,
+          metric: "1105 Runs",
+          sr: "152.41 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Cameron Green": {
+          matches: 43,
+          metric: "1029 Runs",
+          sr: "151.10 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Shimron Hetmyer": {
+          matches: 74,
+          metric: "1250 Runs",
+          sr: "153.19 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Vijay Shankar": {
+          matches: 68,
+          metric: "1450 Runs",
+          sr: "128.50 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Deepak Hooda": {
+          matches: 125,
+          metric: "1496 Runs",
+          sr: "127.65 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Krishnappa Gowtham": {
+          matches: 36,
+          metric: "247 Runs",
+          sr: "144.12 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Lalit Yadav": {
+          matches: 27,
+          metric: "305 Runs",
+          sr: "105.17 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Romario Shepherd": {
+          matches: 32,
+          metric: "268 Runs",
+          sr: "145.00 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Moeen Ali": {
+          matches: 73,
+          metric: "1167 Runs",
+          sr: "139.76 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "David Miller ": {
+          matches: 152,
+          metric: "3288 Runs",
+          sr: "138.45 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Tilak Varma": {
+          matches: 68,
+          metric: "1858 Runs",
+          sr: "144.70 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Dhruv Jurel": {
+          matches: 58,
+          metric: "1195 Runs",
+          sr: "154.19 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Khaleel Ahmed": {
+          matches: 76,
+          metric: "91 Wickets",
+          sr: "18.21 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Deepak Chahar": {
+          matches: 103,
+          metric: "96 Wickets",
+          sr: "34.00 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Mukesh Kumar": {
+          matches: 42,
+          metric: "42 Wickets",
+          sr: "19.62 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Avesh Khan": {
+          matches: 83,
+          metric: "93 Wickets",
+          sr: "19.00 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "T. Natarajan": {
+          matches: 52,
+          metric: "50 Wickets",
+          sr: "58.00 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Prasidh Krishna": {
+          matches: 78,
+          metric: "90 Wickets",
+          sr: "28.00 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+
+        "Krunal Pandya": {
+          matches: 158,
+          metric: "107 Wickets",
+          sr: "25.24 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Rahul Chahar": {
+          matches: 81,
+          metric: "75 Wickets",
+          sr: "22.59 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Washington Sundar": {
+          matches: 85,
+          metric: "39 Wickets",
+          sr: "126.20 SR",
+          label1: "Wickets",
+          label2: "Strike Rate",
+        },
+        "Glenn Phillips": {
+          matches: 14,
+          metric: "132 Runs",
+          sr: "142.30 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        // ---------------- WICKET-KEEPERS ----------------
+        "MS Dhoni": {
+          matches: 264,
+          metric: "5243 Runs",
+          sr: "137.54 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Jos Buttler": {
+          matches: 107,
+          metric: "3582 Runs",
+          sr: "147.53 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "KL Rahul": {
+          matches: 132,
+          metric: "4683 Runs",
+          sr: "134.42 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Rishabh Pant": {
+          matches: 111,
+          metric: "3284 Runs",
+          sr: "148.93 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Sanju Samson": {
+          matches: 167,
+          metric: "4419 Runs",
+          sr: "138.96 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Ishan Kishan": {
+          matches: 105,
+          metric: "2644 Runs",
+          sr: "135.86 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Heinrich Klaasen": {
+          matches: 64,
+          metric: "2104 Runs",
+          sr: "166.72 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Nicholas Pooran": {
+          matches: 76,
+          metric: "1769 Runs",
+          sr: "158.37 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Phil Salt": {
+          matches: 65,
+          metric: "1852 Runs",
+          sr: "163.75 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Quinton De Kock": {
+          matches: 107,
+          metric: "3157 Runs",
+          sr: "134.23 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        // ---------------- ALL-ROUNDERS ----------------
+        "Hardik Pandya": {
+          matches: 137,
+          metric: "2525 Runs",
+          sr: "145.62 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Josh Inglis": {
+          matches: 16,
+          metric: "544 Runs",
+          sr: "173.25 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Krunal Pandya": {
+          matches: 158,
+          metric: "1982 Runs",
+          sr: "133.83 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Abhishek Sharma": {
+          matches: 92,
+          metric: "2379 Runs",
+          sr: "171.27 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Ravindra Jadeja": {
+          matches: 240,
+          metric: "2959 Runs",
+          sr: "129.50 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Axar Patel": {
+          matches: 150,
+          metric: "117 Wkts",
+          sr: "7.28 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Shivam Dube": {
+          matches: 65,
+          metric: "1502 Runs",
+          sr: "145.68 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Marcus Stoinis": {
+          matches: 96,
+          metric: "1866 Runs",
+          sr: "142.01 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Sunil Narine": {
+          matches: 176,
+          metric: "180 Wkts",
+          sr: "6.73 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Mitchell Marsh": {
+          matches: 42,
+          metric: "666 Runs",
+          sr: "127.83 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Will Jacks": {
+          matches: 28,
+          metric: "602 Runs",
+          sr: "158.84 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Liam Livingstone": {
+          matches: 39,
+          metric: "939 Runs",
+          sr: "162.46 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        // ---------------- BOWLERS ----------------
+        "Jasprit Bumrah": {
+          matches: 158,
+          metric: "165 Wkts",
+          sr: "7.30 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Rashid Khan": {
+          matches: 121,
+          metric: "149 Wkts",
+          sr: "6.82 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Yuzvendra Chahal": {
+          matches: 160,
+          metric: "205 Wkts",
+          sr: "7.79 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Kagiso Rabada": {
+          matches: 80,
+          metric: "117 Wkts",
+          sr: "8.42 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Pat Cummins": {
+          matches: 58,
+          metric: "63 Wkts",
+          sr: "8.77 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Trent Boult": {
+          matches: 104,
+          metric: "121 Wkts",
+          sr: "8.29 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Arshdeep Singh": {
+          matches: 65,
+          metric: "76 Wkts",
+          sr: "9.02 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Bhuvneshwar Kumar": {
+          matches: 176,
+          metric: "181 Wkts",
+          sr: "7.56 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Mitchell Starc": {
+          matches: 56,
+          metric: "60 Wkts",
+          sr: "7.63 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Jofra Archer": {
+          matches: 40,
+          metric: "48 Wkts",
+          sr: "7.43 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Josh Hazlewood": {
+          matches: 52,
+          metric: "72 Wickets",
+          sr: "8.62",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Kuldeep Yadav": {
+          matches: 84,
+          metric: "87 Wkts",
+          sr: "8.08 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Lockie Ferguson": {
+          matches: 45,
+          metric: "44 Wkts",
+          sr: "8.78 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Varun Chakravarthy": {
+          matches: 70,
+          metric: "83 Wkts",
+          sr: "7.55 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Harshit Rana": {
+          matches: 15,
+          metric: "25 Wkts",
+          sr: "9.05 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        // ---------------- PROMINENT INDIAN & OS DOMESTIC ----------------
+        "Deepak Chahar": {
+          matches: 81,
+          metric: "77 Wkts",
+          sr: "8.04 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Khaleel Ahmed": {
+          matches: 57,
+          metric: "74 Wkts",
+          sr: "8.72 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Prasidh Krishna": {
+          matches: 51,
+          metric: "49 Wkts",
+          sr: "8.92 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Harshal Patel": {
+          matches: 105,
+          metric: "135 Wkts",
+          sr: "8.65 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "T. Natarajan": {
+          matches: 61,
+          metric: "67 Wkts",
+          sr: "8.84 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Mayank Yadav": {
+          matches: 4,
+          metric: "7 Wkts",
+          sr: "6.98 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+
+        "Riyan Parag": {
+          matches: 68,
+          metric: "1173 Runs",
+          sr: "134.82 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Tilak Varma": {
+          matches: 38,
+          metric: "1156 Runs",
+          sr: "146.32 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+        "Sai Sudharsan": {
+          matches: 25,
+          metric: "1034 Runs",
+          sr: "139.16 SR",
+          label1: "Runs",
+          label2: "Strike Rate",
+        },
+
+        "Washington Sundar": {
+          matches: 60,
+          metric: "37 Wkts",
+          sr: "7.54 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+        "Shardul Thakur": {
+          matches: 95,
+          metric: "94 Wkts",
+          sr: "9.31 Eco",
+          label1: "Wickets",
+          label2: "Economy",
+        },
+      };
+
+      function generatePlayerSets(rng) {
+        const rand = rng || Math.random;
+        const sets = [];
+        rawSetsData.forEach((setText) => {
+          const lines = setText.trim().split("\n");
+          const setArray = [];
+          lines.forEach((line) => {
+            const [name, role, priceStr] = line.split("|");
+            if (!name || !role || !priceStr) return;
+
+            const cleanName = name.trim();
+            const cleanRole = role.trim();
+            let stats = playerStatsDatabase[cleanName];
+
+            if (!stats) {
+              const isBatsman =
+                cleanRole.includes("BATSMAN") ||
+                cleanRole.includes("WICKETKEEPER");
+              stats = {
+                matches: Math.floor(rand() * 20) + 5,
+                metric: isBatsman
+                  ? `${Math.floor(rand() * 400) + 100} Runs`
+                  : `${Math.floor(rand() * 25) + 5} Wkts`,
+                sr: isBatsman
+                  ? `${(rand() * 25 + 120).toFixed(2)} SR`
+                  : `${(rand() * 2.5 + 7.5).toFixed(2)} Eco`,
+                label1: isBatsman ? "Runs" : "Wickets",
+                label2: isBatsman ? "Strike Rate" : "Economy",
+              };
+            }
+
+            setArray.push({
+              name: cleanName,
+              role: cleanRole,
+              basePrice: parseInt(priceStr.trim()),
+              matches: stats.matches,
+              metric: stats.metric,
+              sr: stats.sr,
+              label1: stats.label1,
+              label2: stats.label2,
+              videoUrl: videoMapping[cleanName] || null,
+            });
+          });
+
+          shuffleArray(setArray, rand);
+          sets.push(setArray);
+        });
+        return sets;
+      }
+      let playerSets = null;
+      function ensurePlayerSets() {
+        if (playerSets) return;
+        playerSets = generatePlayerSets(createSeededRng(roomCode || "lobby"));
+      }
+
+      let currentSetIndex = 0;
+      let currentPlayerIndex = 0;
+      let userTeam = null;
+      let userName = "";
+      let roomCode = "";
+      let currentBid = 0;
+      let currentLeader = null;
+      const teamPurses = {};
+      const soldPlayersHistory = [];
+      const unsoldPlayersHistory = [];
+      let isConnectionMessageShown = false;
+      let countdownInterval;
+      let bidInactivityInterval;
+      let inactiveSeconds = 0;
+      let isBiddingOpen = false;
+      let mqttClient = null;
+      let myClientId = "peer_" + Math.random().toString(36).substring(2, 10);
+      let peers = {};
+      let myVirtualTeams = {};
+      let activeBidTeam = null;
+      let reservations = {};
+      let rosterMembers = {};
+      let isHost = false;
+      let gameHasStarted = false;
+      let isPaused = false;
+      let isAuctionCompleted = false;
+      let pendingAutoNext = false;
+
+      // ACCURATE USER COUNT LOGIC
+      let globalPeers = {};
+      const GLOBAL_HEARTBEAT_TOPIC = "3d-ipl-auction/global/heartbeat";
+
+      function initGlobalPresence() {
+        const globalClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+          clientId: "global_" + myClientId,
+          keepalive: 60,
+          clean: true,
+        });
+
+        globalClient.on("connect", () => {
+          globalClient.subscribe(GLOBAL_HEARTBEAT_TOPIC + "/+");
+          setInterval(() => {
+            globalClient.publish(
+              GLOBAL_HEARTBEAT_TOPIC + "/" + myClientId,
+              "ping",
+              { qos: 0, retain: false },
+            );
+          }, 5000);
+        });
+
+        globalClient.on("message", (topic) => {
+          const senderId = topic.split("/").pop();
+          globalPeers[senderId] = Date.now();
+          cleanupGlobalPeers();
+        });
+      }
+
+      function cleanupGlobalPeers() {
+        const now = Date.now();
+        Object.keys(globalPeers).forEach((id) => {
+          if (now - globalPeers[id] > 12000) delete globalPeers[id];
+        });
+        const count = Object.keys(globalPeers).length || 1;
+        document.getElementById("global-user-count").innerText = count;
+      }
+
+      function showNotification(msg) {
+        const banner = document.getElementById("notification-banner");
+        const text = document.getElementById("notification-text");
+        text.innerText = msg;
+        banner.classList.remove(
+          "-translate-y-20",
+          "opacity-0",
+          "pointer-events-none",
+        );
+        banner.classList.add("translate-y-0", "opacity-100");
+        setTimeout(() => {
+          banner.classList.remove("translate-y-0", "opacity-100");
+          banner.classList.add(
+            "-translate-y-20",
+            "opacity-0",
+            "pointer-events-none",
+          );
+        }, 4500);
+      }
+
+      function openSquadModal(teamKey) {
+        if (!teamKey || !teamsInfo[teamKey]) return;
+        const team = teamsInfo[teamKey];
+        const modal = document.getElementById("squad-modal");
+        document.getElementById("modal-team-color-bar").style.backgroundColor =
+          team.color;
+        document.getElementById("modal-team-title").innerText =
+          team.name.toUpperCase();
+        document.getElementById("modal-team-subtitle").innerText =
+          `FRANCHISE CODE: ${teamKey}`;
+        document.getElementById("modal-team-remaining-purse").innerText =
+          `${(teamPurses[teamKey] / 100).toFixed(2)} Cr`;
+        const rosterContainer = document.getElementById("modal-roster-list");
+        rosterContainer.innerHTML = "";
+        const dynamicSquad = soldPlayersHistory.filter(
+          (item) => item.buyer === teamKey,
+        );
+        if (dynamicSquad.length === 0) {
+          rosterContainer.innerHTML = `<div class="text-center py-8 text-slate-500 italic text-sm border border-dashed border-slate-800 rounded-xl bg-slate-950/40">No players signed yet on this auction floor.</div>`;
+        } else {
+          dynamicSquad.forEach((player) => {
+            const row = document.createElement("div");
+            row.className =
+              "flex justify-between items-center bg-slate-950/80 p-3 border border-slate-800 rounded-xl shadow-sm";
+            row.innerHTML = `<div><h4 class="font-bold text-sm text-white">${player.name}</h4><span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full uppercase tracking-wider font-semibold">${player.role}</span></div><div class="text-right"><span class="font-black text-emerald-400 text-sm">₹${(player.price / 100).toFixed(2)} Cr</span></div>`;
+            rosterContainer.appendChild(row);
+          });
+        }
+        modal.classList.remove("hidden");
+        setTimeout(() => {
+          modal.classList.remove("opacity-0");
+        }, 10);
+      }
+
+      function closeSquadModal() {
+        const modal = document.getElementById("squad-modal");
+        modal.classList.add("opacity-0");
+        setTimeout(() => {
+          modal.classList.add("hidden");
+        }, 300);
+      }
+
+      let currentLobbyMode = "create";
+      let roomVisibility = "private";
+      let discoveryClient = null;
+      let publicRoomsSeen = {};
+      const PUBLIC_ROOMS_TOPIC = "3d-ipl-auction/public-rooms";
+      const PUBLIC_ROOM_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+      function setRoomVisibility(vis) {
+        roomVisibility = vis;
+        const publicBtn = document.getElementById("visibility-public-btn");
+        const privateBtn = document.getElementById("visibility-private-btn");
+        const hint = document.getElementById("visibility-hint");
+        const activeClass =
+          "flex-1 py-2 px-2 rounded-md text-[11px] font-black tracking-wider transition-all cursor-pointer bg-amber-500 text-slate-950";
+        const inactiveClass =
+          "flex-1 py-2 px-2 rounded-md text-[11px] font-black tracking-wider transition-all cursor-pointer text-slate-400 hover:text-white hover:bg-slate-800/50";
+        if (vis === "public") {
+          publicBtn.className = activeClass;
+          privateBtn.className = inactiveClass;
+          hint.innerText =
+            "Public rooms can be joined by anyone browsing the Join tab — no code required.";
+        } else {
+          privateBtn.className = activeClass;
+          publicBtn.className = inactiveClass;
+          hint.innerText =
+            "Private rooms can only be joined by sharing the room code directly.";
+        }
+      }
+
+      function publishPublicRoomListing() {
+        if (
+          !mqttClient ||
+          !mqttClient.connected ||
+          roomVisibility !== "public" ||
+          currentLobbyMode !== "create"
+        )
+          return;
+        mqttClient.publish(
+          `${PUBLIC_ROOMS_TOPIC}/${roomCode.toLowerCase()}`,
+          JSON.stringify({
+            roomCode,
+            hostName: userName,
+            createdAt: Date.now(),
+          }),
+          { retain: true, qos: 0 },
+        );
+      }
+
+      function unpublishPublicRoomListing() {
+        if (!mqttClient || !mqttClient.connected) return;
+        mqttClient.publish(
+          `${PUBLIC_ROOMS_TOPIC}/${roomCode.toLowerCase()}`,
+          "",
+          { retain: true, qos: 0 },
+        );
+      }
+
+      function renderPublicRoomsList() {
+        const container = document.getElementById("public-rooms-list");
+        if (!container) return;
+        const now = Date.now();
+        const rooms = Object.values(publicRoomsSeen).filter(
+          (r) => now - r.createdAt < PUBLIC_ROOM_MAX_AGE_MS,
+        );
+        rooms.sort((a, b) => b.createdAt - a.createdAt);
+        if (rooms.length === 0) {
+          container.innerHTML = `<p class="text-[11px] text-slate-500 italic py-2">No open public rooms right now. Ask the host for a code, or check back shortly.</p>`;
+          return;
+        }
+        container.innerHTML = "";
+        rooms.forEach((room) => {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className =
+            "w-full flex items-center justify-between bg-slate-950/80 border border-slate-700 hover:border-amber-500 rounded-lg px-3 py-2 text-left transition-colors cursor-pointer";
+          row.innerHTML = `<span><span class="block text-xs font-mono font-black text-amber-400 tracking-widest">${room.roomCode}</span><span class="block text-[10px] text-slate-500">Hosted by ${room.hostName || "Unknown"}</span></span><span class="text-[10px] font-black text-slate-950 bg-amber-500 px-2 py-1 rounded">JOIN</span>`;
+          row.onclick = () => joinPublicRoomListing(room.roomCode);
+          container.appendChild(row);
+        });
+      }
+
+      function joinPublicRoomListing(code) {
+        document.getElementById("join-room-code-display").value = code;
+        document.getElementById("room-code-input").value = code;
+        connectToRoomSignal();
+      }
+
+      function startPublicRoomsDiscovery() {
+        const container = document.getElementById("public-rooms-list");
+        if (container && Object.keys(publicRoomsSeen).length === 0) {
+          container.innerHTML = `<p class="text-[11px] text-slate-500 italic py-2">Searching for open rooms...</p>`;
+        }
+        if (discoveryClient && discoveryClient.connected) return;
+        discoveryClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+          clientId: "discover_" + Math.random().toString(36).substring(2, 10),
+          keepalive: 60,
+          clean: true,
+        });
+        discoveryClient.on("connect", () => {
+          discoveryClient.subscribe(`${PUBLIC_ROOMS_TOPIC}/+`);
+        });
+        discoveryClient.on("message", (topic, payload) => {
+          const code = topic.split("/").pop().toUpperCase();
+          const text = payload.toString();
+          if (!text) {
+            delete publicRoomsSeen[code];
+          } else {
+            try {
+              publicRoomsSeen[code] = JSON.parse(text);
+            } catch (e) {}
+          }
+          renderPublicRoomsList();
+        });
+      }
+
+      function stopPublicRoomsDiscovery() {
+        if (discoveryClient) {
+          discoveryClient.end(true);
+          discoveryClient = null;
+        }
+      }
+
+      function switchLobbyTab(mode) {
+        currentLobbyMode = mode;
+        const tabCreate = document.getElementById("tab-create");
+        const tabJoin = document.getElementById("tab-join");
+        const createSection = document.getElementById("create-room-section");
+        const joinSection = document.getElementById("join-room-section");
+        const joinBtn = document.getElementById("join-btn");
+        if (mode === "create") {
+          tabCreate.className =
+            "flex-1 py-2.5 px-4 rounded-lg text-xs font-black tracking-widest transition-all cursor-pointer bg-amber-500 text-slate-950";
+          tabJoin.className =
+            "flex-1 py-2.5 px-4 rounded-lg text-xs font-black tracking-widest transition-all cursor-pointer text-slate-400 hover:text-white hover:bg-slate-800/50";
+          createSection.classList.remove("hidden");
+          joinSection.classList.add("hidden");
+          const generatedCode =
+            "IPL-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+          document.getElementById("room-code-input").value = generatedCode;
+          document.getElementById("host-room-display").innerText =
+            generatedCode;
+          setRoomVisibility("private");
+          stopPublicRoomsDiscovery();
+          joinBtn.disabled = false;
+          joinBtn.className =
+            "w-full mt-6 bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black py-4 rounded-xl shadow-lg tracking-widest text-sm cursor-pointer";
+          joinBtn.innerText = "CREATE & LOCK IN TEAM";
+        } else {
+          tabCreate.className =
+            "flex-1 py-2.5 px-4 rounded-lg text-xs font-black tracking-widest transition-all cursor-pointer text-slate-400 hover:text-white hover:bg-slate-800/50";
+          tabJoin.className =
+            "flex-1 py-2.5 px-4 rounded-lg text-xs font-black tracking-widest transition-all cursor-pointer bg-amber-500 text-slate-950";
+          createSection.classList.add("hidden");
+          joinSection.classList.remove("hidden");
+          document.getElementById("room-code-input").value = "";
+          document.getElementById("join-room-code-display").value = "";
+          joinBtn.disabled = true;
+          joinBtn.className =
+            "w-full mt-6 bg-slate-800 text-slate-500 font-black py-4 rounded-xl shadow-lg tracking-not-allowed cursor-not-allowed text-sm";
+          joinBtn.innerText = "CONNECT TO A ROOM FIRST";
+          startPublicRoomsDiscovery();
+        }
+      }
+
+      function syncRoomCodeInput(val) {
+        document.getElementById("room-code-input").value = val.toUpperCase();
+      }
+
+      function buildLobby() {
+        const grid = document.getElementById("lobby-teams-grid");
+        grid.innerHTML = "";
+        Object.keys(teamsInfo).forEach((key) => {
+          const team = teamsInfo[key];
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.id = `lobby-team-btn-${key}`;
+          btn.className = `w-full aspect-square rounded-xl transition-all border-2 border-slate-800 hover:border-amber-500 relative flex flex-col items-center justify-center p-2 text-center group cursor-pointer`;
+          btn.style.backgroundColor = team.color;
+          btn.onclick = () => selectFranchise(key);
+          btn.innerHTML = `<span class="text-lg font-black text-white group-hover:scale-110 transition-transform">${key}</span><span class="text-[8px] text-slate-300 font-bold block mt-1 tracking-wider leading-none truncate w-full">${team.name}</span><div id="selection-border-${key}" class="hidden absolute -inset-[2px] border-4 border-amber-400 rounded-xl pointer-events-none"></div>`;
+          grid.appendChild(btn);
+        });
+      }
+
+      function connectToRoomSignal() {
+        const inputVal = document
+          .getElementById("room-code-input")
+          .value.trim();
+        if (!inputVal) {
+          showNotification("Please enter a Room Code first!");
+          return;
+        }
+        roomCode = inputVal.toUpperCase();
+        ensurePlayerSets();
+        mqttClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", {
+          clientId: myClientId,
+          keepalive: 60,
+          clean: true,
+          will: {
+            topic: `3d-ipl-auction/room/${roomCode.toLowerCase()}`,
+            payload: JSON.stringify({ type: "LEAVE", senderId: myClientId }),
+            qos: 0,
+            retain: false,
+          },
+        });
+        mqttClient.on("connect", () => {
+          mqttClient.subscribe(`3d-ipl-auction/room/${roomCode.toLowerCase()}`);
+          broadcastMessage({ type: "QUERY_PEERS" });
+          updateMemberCounts();
+          if (userTeam) {
+            broadcastMessage({
+              type: "SELECTING",
+              team: userTeam,
+              name: userName || "Pro Bidder",
+            });
+          }
+          document.getElementById("join-btn").disabled = false;
+          document.getElementById("join-btn").className =
+            "w-full mt-6 bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black py-4 rounded-xl shadow-lg tracking-widest text-sm cursor-pointer";
+          document.getElementById("join-btn").innerText =
+            "LOCK IN & ENTER ARENA";
+          updateSpeechBubble(
+            "Signal established. Checking occupied franchises...",
+          );
+          if (!isConnectionMessageShown) {
+            showNotification("Connected to game servers successfully!");
+            isConnectionMessageShown = true;
+          }
+          publishPublicRoomListing();
+        });
+        mqttClient.on("message", (topic, payload) => {
+          try {
+            const msg = JSON.parse(payload.toString());
+            handleNetworkMessage(msg);
+          } catch (e) {
+            console.error("Payload parsing error:", e);
+          }
+        });
+      }
+
+      function handleNetworkMessage(msg) {
+        if (msg.senderId === myClientId) return;
+        switch (msg.type) {
+          case "QUERY_PEERS":
+            if (userTeam) {
+              broadcastMessage({
+                type: "PEER_REPLY",
+                name: userName,
+                team: userTeam,
+                gameStarted: gameHasStarted,
+              });
+            }
+            break;
+          case "PEER_REPLY":
+          case "JOIN":
+            peers[msg.senderId] = { name: msg.name, team: msg.team };
+            rosterMembers[msg.senderId] = { name: msg.name, team: msg.team };
+            delete reservations[msg.senderId];
+            if (msg.gameStarted) gameHasStarted = true;
+            updateLobbyFranchiseAvailability();
+            updateHostElection();
+            updateMemberCounts();
+            break;
+          case "SELECTING":
+            if (!peers[msg.senderId]) {
+              reservations[msg.senderId] = { name: msg.name, team: msg.team };
+              updateLobbyFranchiseAvailability();
+            }
+            break;
+          case "LEAVE":
+            delete peers[msg.senderId];
+            delete reservations[msg.senderId];
+            updateLobbyFranchiseAvailability();
+            updateHostElection();
+            updateMemberCounts();
+            break;
+          case "START_AUCTION":
+            gameHasStarted = true;
+            executeLobbyOutAnimation();
+            break;
+          case "BID":
+            currentBid = msg.amount;
+            currentLeader = msg.team;
+            updateBidUI();
+            pulseArena(msg.team);
+            updateSpeechBubble(
+              `Bid placed: ${msg.team} at ${formatCrores(currentBid)}.`,
+            );
+            speak(`${msg.team} bids ${formatCrores(currentBid)}.`);
+            if (isHost) resetInactivityClock();
+            break;
+          case "TIMER_TICK":
+            inactiveSeconds = msg.value;
+            runSynchronizedTimerStep();
+            break;
+          case "DRAFT_INTRO":
+            currentSetIndex = msg.index.set;
+            currentPlayerIndex = msg.index.player;
+            document.getElementById("set-indicator").innerText =
+              `SET: ${currentSetIndex + 1}`;
+            currentBid = msg.amount;
+            currentLeader = null;
+            isBiddingOpen = false;
+            runHologramIntroSequence();
+            break;
+          case "DRAFT_OPEN":
+            openBiddingFloor(playerSets[currentSetIndex][currentPlayerIndex]);
+            break;
+          case "SOLD_OR_UNSOLD":
+            settlePlayerAndCleanControls(msg.leader, msg.amount);
+            break;
+          case "PAUSE_TOGGLE":
+            applyPauseState(msg.value);
+            break;
+          case "COMPLETE_AUCTION":
+            applyAuctionCompleted();
+            break;
+          case "HOST_ASSIGN":
+            peers[msg.virtualId] = {
+              name: msg.name,
+              team: msg.team,
+              virtual: true,
+            };
+            rosterMembers[msg.virtualId] = {
+              name: msg.name,
+              team: msg.team,
+              virtual: true,
+            };
+            updateLobbyFranchiseAvailability();
+            updateMemberCounts();
+            break;
+          case "KICK":
+            if (msg.targetId === myClientId) {
+              handleBeingKicked();
+            } else {
+              const kickedInfo =
+                peers[msg.targetId] || rosterMembers[msg.targetId];
+              applyKickRemoval(msg.targetId);
+              if (kickedInfo)
+                showNotification(
+                  `${kickedInfo.name} (${kickedInfo.team}) was removed by the host.`,
+                );
+            }
+            break;
+          case "CHAT":
+            pushToTeamChat({
+              name: msg.name || "Bidder",
+              team: msg.team || null,
+              text: msg.text || "",
+              mine: false,
+            });
+            break;
+        }
+      }
+
+      function broadcastMessage(data) {
+        if (mqttClient && mqttClient.connected) {
+          data.senderId = myClientId;
+          mqttClient.publish(
+            `3d-ipl-auction/room/${roomCode.toLowerCase()}`,
+            JSON.stringify(data),
+          );
+        }
+      }
+
+      function findTeamOccupant(teamKey) {
+        const confirmed = Object.values(peers).find((p) => p.team === teamKey);
+        if (confirmed) return { name: confirmed.name, pending: false };
+        const pending = Object.values(reservations).find(
+          (p) => p.team === teamKey,
+        );
+        if (pending) return { name: pending.name, pending: true };
+        return null;
+      }
+
+      function selectFranchise(teamKey) {
+        const occupant = findTeamOccupant(teamKey);
+        if (occupant) {
+          showNotification(
+            occupant.pending
+              ? `Franchise ${teamKey} is currently being selected by another player!`
+              : `Franchise ${teamKey} is already occupied by another human player!`,
+          );
+          return;
+        }
+        userTeam = teamKey;
+        Object.keys(teamsInfo).forEach((key) => {
+          const border = document.getElementById(`selection-border-${key}`);
+          if (key === teamKey) border.classList.remove("hidden");
+          else border.classList.add("hidden");
+        });
+        broadcastMessage({
+          type: "SELECTING",
+          team: teamKey,
+          name: userName || "Pro Bidder",
+        });
+      }
+
+      function updateLobbyFranchiseAvailability() {
+        Object.keys(teamsInfo).forEach((key) => {
+          const occupant = findTeamOccupant(key);
+          const btn = document.getElementById(`lobby-team-btn-${key}`);
+          if (btn) {
+            if (occupant) {
+              btn.style.opacity = "0.3";
+              btn.style.cursor = "not-allowed";
+              btn.title = occupant.pending
+                ? `Being selected by: ${occupant.name}`
+                : `Occupied by: ${occupant.name}`;
+            } else {
+              btn.style.opacity = "1";
+              btn.style.cursor = "pointer";
+              btn.title = teamsInfo[key].name;
+            }
+          }
+        });
+      }
+
+      function updateHostElection() {
+        const allPeerIds = [myClientId, ...Object.keys(peers)].sort();
+        isHost = allPeerIds[0] === myClientId;
+        const hostControls = document.getElementById("host-controls");
+        if (hostControls) {
+          hostControls.classList.toggle(
+            "hidden",
+            !isHost || isAuctionCompleted,
+          );
+        }
+        updateMemberCounts();
+      }
+
+      function updateMemberCounts() {
+        const onlineCount = Object.keys(peers).length + 1;
+        const rosterCount =
+          Object.keys(rosterMembers).length + (userTeam ? 1 : 0);
+        const statusPill = document.getElementById("connection-status-pill");
+        if (statusPill) statusPill.innerText = `ONLINE NOW: ${onlineCount}`;
+        const rosterPill = document.getElementById("roster-status-pill");
+        if (rosterPill)
+          rosterPill.innerText = `JOINED THIS ROOM: ${Math.max(rosterCount, onlineCount)}`;
+        const lobbyCount = document.getElementById("lobby-member-count");
+        if (lobbyCount) {
+          const othersOnline = Object.keys(peers).length;
+          lobbyCount.innerText =
+            othersOnline === 1
+              ? "1 manager online"
+              : `${othersOnline} managers online`;
+        }
+      }
+
+      async function joinAuctionRoom() {
+        userName =
+          document.getElementById("player-name-input").value.trim() ||
+          "Pro Bidder";
+        if (!userTeam) {
+          alert(
+            "Please select your exclusive IPL franchise before joining the room.",
+          );
+          return;
+        }
+        roomCode = document
+          .getElementById("room-code-input")
+          .value.trim()
+          .toUpperCase();
+        if (!roomCode) {
+          alert("Please enter or generate a valid room code.");
+          return;
+        }
+        ensurePlayerSets();
+        if (!mqttClient || !mqttClient.connected) {
+          connectToRoomSignal();
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        updateHostElection();
+        const confirmedOccupant = Object.entries(peers).find(
+          ([senderId, p]) => p.team === userTeam && senderId !== myClientId,
+        );
+        if (confirmedOccupant) {
+          showNotification(
+            `Franchise ${userTeam} was just locked in by ${confirmedOccupant[1].name}. Please pick another franchise.`,
+          );
+          userTeam = null;
+          Object.keys(teamsInfo).forEach((key) => {
+            const border = document.getElementById(`selection-border-${key}`);
+            if (border) border.classList.add("hidden");
+          });
+          updateLobbyFranchiseAvailability();
+          return;
+        }
+        Object.keys(teamsInfo).forEach((key) => {
+          teamPurses[key] = 12000;
+          const badge = document.getElementById(`badge-purse-${key}`);
+          if (badge) badge.innerText = "120 Cr";
+        });
+        document.getElementById("display-room-code").innerText =
+          `ROOM: ${roomCode}`;
+        document.getElementById("user-display-info").innerText =
+          `Manager: ${userName} (${userTeam})`;
+        document.getElementById("user-team-tag").innerText = `${userTeam}`;
+        activeBidTeam = userTeam;
+        broadcastMessage({ type: "JOIN", name: userName, team: userTeam });
+        document.getElementById("lobby-screen").classList.add("opacity-0");
+        setTimeout(() => {
+          document.getElementById("lobby-screen").style.display = "none";
+          const arena = document.getElementById("main-arena");
+          arena.classList.remove("hidden");
+          arena.style.opacity = "1";
+          arena.style.display = "flex";
+          if (isHost)
+            document
+              .getElementById("host-start-panel")
+              .classList.remove("hidden");
+          else
+            document
+              .getElementById("wait-start-panel")
+              .classList.remove("hidden");
+        }, 500);
+      }
+
+      function broadcastStartAuction() {
+        broadcastMessage({ type: "START_AUCTION" });
+        gameHasStarted = true;
+        unpublishPublicRoomListing();
+        executeLobbyOutAnimation();
+      }
+
+      function executeLobbyOutAnimation() {
+        document.getElementById("host-start-panel").classList.add("hidden");
+        document.getElementById("wait-start-panel").classList.add("hidden");
+        if (document.getElementById("lobby-screen").style.display !== "none") {
+          document.getElementById("lobby-screen").classList.add("opacity-0");
+          setTimeout(() => {
+            document.getElementById("lobby-screen").style.display = "none";
+            const arena = document.getElementById("main-arena");
+            arena.classList.remove("hidden");
+            arena.style.opacity = "1";
+            arena.style.display = "flex";
+            document
+              .getElementById("auction-stats-controls")
+              .classList.remove("hidden");
+            if (isHost) setTimeout(autoNextPlayer, 1500);
+          }, 500);
+        } else {
+          document
+            .getElementById("auction-stats-controls")
+            .classList.remove("hidden");
+          if (isHost) setTimeout(autoNextPlayer, 1500);
+        }
+      }
+
+      function autoNextPlayer() {
+        if (isAuctionCompleted) return;
+        if (isPaused) {
+          pendingAutoNext = true;
+          return;
+        }
+        if (currentSetIndex >= playerSets.length) {
+          updateSpeechBubble("The master pool is now empty. Bidding finished.");
+          speak(
+            "The Super Auction has concluded. All selected squads have been registered.",
+          );
+          return;
+        }
+        if (currentPlayerIndex >= playerSets[currentSetIndex].length) {
+          currentSetIndex++;
+          currentPlayerIndex = 0;
+          if (currentSetIndex >= playerSets.length) {
+            updateSpeechBubble(
+              "The master pool is now empty. Bidding finished.",
+            );
+            speak(
+              "The Super Auction has concluded. All selected squads have been registered.",
+            );
+            return;
+          }
+          document.getElementById("set-indicator").innerText =
+            `SET: ${currentSetIndex + 1}`;
+          showNotification(`Starting Set ${currentSetIndex + 1}!`);
+        }
+        const player = playerSets[currentSetIndex][currentPlayerIndex];
+        currentBid = player.basePrice;
+        currentLeader = null;
+        isBiddingOpen = false;
+        broadcastMessage({
+          type: "DRAFT_INTRO",
+          index: { set: currentSetIndex, player: currentPlayerIndex },
+          amount: currentBid,
+        });
+        runHologramIntroSequence(player);
+        currentPlayerIndex++;
+      }
+      async function runHologramIntroSequence(playerOverride) {
+        const player =
+          playerOverride || playerSets[currentSetIndex][currentPlayerIndex];
+
+        document.getElementById("stats-panel").classList.add("hidden");
+        document.getElementById("bid-controls").classList.add("hidden");
+        document.getElementById("video-overlay").classList.remove("hidden");
+
+        const video = document.getElementById("my-video-player");
+        const videoSource = document.getElementById("player-video-source");
+        const audio = document.getElementById("intro-audio");
+
+        // Fetch Audio from Private Supabase Bucket
+        const audioUrl = await getCachedIntroAudioUrl();
+        if (audioUrl && audio) {
+          audio.src = audioUrl;
+        }
+
+        // Fetch Video from Private Supabase Bucket
+        if (player.name) {
+          try {
+            const fileName =
+              videoMapping[player.name] ||
+              player.name.toLowerCase().replace(/\s+/g, "_") + ".mp4";
+            const videoUrl = await getSupabaseSignedUrl(fileName);
+
+            if (videoUrl && videoSource) {
+              video.style.display = "block";
+              videoSource.src = videoUrl;
+              video.load();
+              video
+                .play()
+                .catch((e) => console.warn("Video autoplay blocked:", e));
+            } else {
+              console.warn("No signed URL returned, hiding video.");
+              video.style.display = "none";
+            }
+          } catch (err) {
+            console.error("Failed to load video from Supabase:", err);
+            video.style.display = "none";
+          }
+        } else {
+          video.style.display = "none";
+          video.pause();
+        }
+
+        if (audio) {
+          audio.currentTime = 0;
+          audio.play().catch((e) => console.warn("Audio autoplay blocked:", e));
+        }
+
+        const title = document.getElementById("video-player-name");
+        if (title) title.innerText = player.name.toUpperCase();
+        updateSpeechBubble(
+          `Stream Reveal: ${player.name}. Base price: ${formatCrores(currentBid)}.`,
+        );
+        speak(
+          `Up next on the draft platform, ${player.name}. Classified as ${player.role}. Opened at ${formatCrores(currentBid)}.`,
+        );
+
+        let timeLeft = 10;
+        document.getElementById("countdown-timer").innerText = timeLeft;
+        document.getElementById("reveal-progress").style.width = "100%";
+        clearInterval(countdownInterval);
+        countdownInterval = setInterval(() => {
+          if (isPaused || isAuctionCompleted) return;
+          timeLeft--;
+          document.getElementById("countdown-timer").innerText = timeLeft;
+          document.getElementById("reveal-progress").style.width =
+            `${(timeLeft / 10) * 100}%`;
+          if (timeLeft <= 0) {
+            clearInterval(countdownInterval);
+            if (video) video.pause();
+            if (audio) {
+              audio.pause();
+              audio.currentTime = 0;
+            }
+            if (isHost) broadcastMessage({ type: "DRAFT_OPEN" });
+            openBiddingFloor(player);
+          }
+        }, 1000);
+      }
+
+      function openBiddingFloor(player) {
+        isBiddingOpen = true;
+        document.getElementById("video-overlay").classList.add("hidden");
+        document.getElementById("player-name").innerText = player.name;
+        document.getElementById("player-role").innerText = player.role;
+        document.getElementById("stat-matches").innerText = player.matches;
+        document.getElementById("stat-primary").innerText = player.metric;
+        document.getElementById("stat-sr").innerText = player.sr;
+        document.getElementById("stat-metric-label").innerText = player.label1;
+        document.getElementById("stat-sr-label").innerText = player.label2;
+        updateBidUI();
+        document.getElementById("stats-panel").classList.remove("hidden");
+        document.getElementById("bid-controls").classList.remove("hidden");
+        document
+          .getElementById("auction-stats-controls")
+          .classList.add("hidden");
+
+        const nextUserBid = currentBid + getIncrementValue();
+        document.getElementById("user-bidding-btn").innerHTML =
+          `📢 BID AS ${activeBidTeam || userTeam} (${formatCrores(nextUserBid)})`;
+        if (isHost) resetInactivityClock();
+        updateTeamSwitcherUI();
+        updateSpeechBubble(`Floor open for ${player.name}. Send your bids.`);
+        speak("Bidding is open.");
+      }
+
+      function getIncrementValue() {
+        if (currentBid >= 1000) return 100;
+        return 50;
+      }
+
+      function placeUserBid() {
+        if (!isBiddingOpen) return;
+        if (isPaused) {
+          updateSpeechBubble("Bidding is paused by the host right now.");
+          return;
+        }
+        if (isAuctionCompleted) return;
+
+        const biddingTeam = activeBidTeam || userTeam;
+        const nextBid = currentBid + getIncrementValue();
+
+        if (currentLeader === biddingTeam) {
+          updateSpeechBubble(
+            `Your franchise (${biddingTeam}) is already the leading bidder!`,
+          );
+          return;
+        }
+
+        broadcastMessage({ type: "BID", team: biddingTeam, amount: nextBid });
+        currentBid = nextBid;
+        currentLeader = biddingTeam;
+        updateBidUI();
+        pulseArena(biddingTeam);
+        updateSpeechBubble(
+          `New leader: ${biddingTeam} with a bid of ${formatCrores(currentBid)}.`,
+        );
+        speak(`${biddingTeam} bids ${formatCrores(currentBid)}.`);
+
+        const nextUserBid = currentBid + getIncrementValue();
+        document.getElementById("user-bidding-btn").innerHTML =
+          `📢 BID AS ${biddingTeam} (${formatCrores(nextUserBid)})`;
+
+        if (isHost) resetInactivityClock();
+      }
+
+      function resetInactivityClock() {
+        clearInterval(bidInactivityInterval);
+        inactiveSeconds = 0;
+        bidInactivityInterval = setInterval(() => {
+          if (isPaused || isAuctionCompleted) return;
+          inactiveSeconds++;
+          broadcastMessage({ type: "TIMER_TICK", value: inactiveSeconds });
+          runSynchronizedTimerStep();
+        }, 1000);
+      }
+
+      function runSynchronizedTimerStep() {
+        if (inactiveSeconds === 4) {
+          updateSpeechBubble(`Going once at ${formatCrores(currentBid)}...`);
+          speak(`Going once at ${formatCrores(currentBid)}.`);
+        } else if (inactiveSeconds === 7) {
+          updateSpeechBubble(
+            `Final call at ${formatCrores(currentBid)}! Going twice...`,
+          );
+          speak(`Going twice.`);
+        } else if (inactiveSeconds === 10) {
+          clearInterval(bidInactivityInterval);
+          if (isHost) {
+            broadcastMessage({
+              type: "SOLD_OR_UNSOLD",
+              leader: currentLeader,
+              amount: currentBid,
+            });
+            settlePlayerAndCleanControls(currentLeader, currentBid);
+          }
+        }
+      }
+
+      function settlePlayerAndCleanControls(winningTeam, finalAmount) {
+        clearInterval(bidInactivityInterval);
+        isBiddingOpen = false;
+        document.getElementById("bid-controls").classList.add("hidden");
+        document
+          .getElementById("auction-stats-controls")
+          .classList.remove("hidden");
+        const player = playerSets[currentSetIndex][currentPlayerIndex - 1];
+        if (winningTeam) {
+          teamPurses[winningTeam] -= finalAmount;
+          document.getElementById(`badge-purse-${winningTeam}`).innerText =
+            `${(teamPurses[winningTeam] / 100).toFixed(2)} Cr`;
+          soldPlayersHistory.push({
+            name: player.name,
+            role: player.role,
+            buyer: winningTeam,
+            price: finalAmount,
+          });
+          updateSpeechBubble(
+            `SOLD! ${player.name} goes to ${winningTeam} for ${formatCrores(finalAmount)}.`,
+          );
+          speak(
+            `Going... going... SOLD! Sold to ${teamsInfo[winningTeam].name} for a final price of ${formatCrores(finalAmount)}.`,
+          );
+          document.getElementById("current-bid-display").innerText =
+            `SOLD: ${winningTeam}`;
+          triggerSoldBurst(teamsInfo[winningTeam].color);
+        } else {
+          unsoldPlayersHistory.push({
+            name: player.name,
+            role: player.role,
+            basePrice: player.basePrice,
+          });
+          updateSpeechBubble(`${player.name} remains Unsold.`);
+          speak(`No takers for ${player.name}. Player remains unsold.`);
+          document.getElementById("current-bid-display").innerText = `UNSOLD`;
+        }
+        if (isHost) setTimeout(autoNextPlayer, 5000);
+      }
+
+      function toggleAuctionPause() {
+        if (!isHost || isAuctionCompleted) return;
+        const nextState = !isPaused;
+        broadcastMessage({ type: "PAUSE_TOGGLE", value: nextState });
+        applyPauseState(nextState);
+      }
+
+      function applyPauseState(paused) {
+        isPaused = paused;
+        const pauseBtn = document.getElementById("pause-auction-btn");
+        const pauseIcon = document.getElementById("pause-btn-icon");
+        const pauseLabel = document.getElementById("pause-btn-label");
+        const banner = document.getElementById("paused-banner");
+        const bidBtn = document.getElementById("user-bidding-btn");
+        const video = document.getElementById("my-video-player");
+        const audio = document.getElementById("intro-audio");
+        if (paused) {
+          if (video && !video.paused) video.pause();
+          if (audio && !audio.paused) audio.pause();
+        } else {
+          if (
+            video &&
+            video.readyState >= 2 &&
+            !document
+              .getElementById("video-overlay")
+              .classList.contains("hidden")
+          ) {
+            video.play().catch((e) => console.warn("Video resume blocked:", e));
+          }
+          if (
+            audio &&
+            !document
+              .getElementById("video-overlay")
+              .classList.contains("hidden")
+          ) {
+            audio.play().catch((e) => console.warn("Audio resume blocked:", e));
+          }
+        }
+        if (pauseIcon) pauseIcon.innerText = paused ? "▶️" : "⏸️";
+        if (pauseLabel) pauseLabel.innerText = paused ? "RESUME" : "PAUSE";
+        if (banner) banner.classList.toggle("hidden", !paused);
+        if (bidBtn) {
+          bidBtn.disabled = paused;
+          bidBtn.style.opacity = paused ? "0.5" : "1";
+          bidBtn.style.pointerEvents = paused ? "none" : "auto";
+        }
+        if (paused) {
+          updateSpeechBubble("Auction paused by the host.");
+          speak("The auction has been paused.");
+        } else {
+          updateSpeechBubble("Auction resumed. Bidding continues.");
+          speak("The auction has resumed.");
+          if (isHost && pendingAutoNext) {
+            pendingAutoNext = false;
+            autoNextPlayer();
+          }
+        }
+      }
+
+      function confirmCompleteAuction() {
+        if (!isHost || isAuctionCompleted) return;
+        const proceed = window.confirm(
+          "End the auction now for everyone? This cannot be undone and any player currently on the floor will go unsold.",
+        );
+        if (!proceed) return;
+        broadcastMessage({ type: "COMPLETE_AUCTION" });
+        applyAuctionCompleted();
+      }
+
+      function applyAuctionCompleted() {
+        isAuctionCompleted = true;
+        isPaused = false;
+        isBiddingOpen = false;
+        pendingAutoNext = false;
+        unpublishPublicRoomListing();
+        clearInterval(countdownInterval);
+        clearInterval(bidInactivityInterval);
+        const video = document.getElementById("my-video-player");
+        const audio = document.getElementById("intro-audio");
+        if (video) video.pause();
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+        document.getElementById("video-overlay").classList.add("hidden");
+        document.getElementById("stats-panel").classList.add("hidden");
+        document.getElementById("bid-controls").classList.add("hidden");
+        document.getElementById("paused-banner").classList.add("hidden");
+        document.getElementById("host-controls").classList.add("hidden");
+        document
+          .getElementById("auction-stats-controls")
+          .classList.remove("hidden");
+        document
+          .getElementById("auction-completed-banner")
+          .classList.remove("hidden");
+        updateSpeechBubble(
+          "The host has ended the auction. Final squads are locked in — check SOLD PLAYERS for the results.",
+        );
+        speak(
+          "The auction has been ended by the host. Final squads are locked in.",
+        );
+      }
+
+      function updateBidUI() {
+        document.getElementById("current-bid-display").innerText =
+          `₹${(currentBid / 100).toFixed(2)} Cr`;
+        if (currentLeader) {
+          const teamObj = teamsInfo[currentLeader];
+          const leadingTag = document.getElementById("leading-team");
+          leadingTag.innerText = `Leader: ${currentLeader}`;
+          leadingTag.style.color = "#ffffff";
+          leadingTag.style.backgroundColor = teamObj.color;
+        } else {
+          const leadingTag = document.getElementById("leading-team");
+          leadingTag.innerText = "Base Entry Price";
+          leadingTag.style.color = "#fbbf24";
+          leadingTag.style.backgroundColor = "#1e293b";
+        }
+      }
+
+      function formatCrores(lakhs) {
+        return `${(lakhs / 100).toFixed(2)} Cr`;
+      }
+
+      function updateSpeechBubble(text) {
+        document.getElementById("auctioneer-speech-bubble").innerText = text;
+        if (typeof pushToEventLog === "function") pushToEventLog(text);
+      }
+
+      function speak(text) {
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const speech = new SpeechSynthesisUtterance(text);
+          speech.rate = 1.05;
+          window.speechSynthesis.speak(speech);
+        }
+      }
+
+      function showAuctionStats(type) {
+        const modal = document.getElementById("stats-modal");
+        const title = document.getElementById("stats-modal-title");
+        const content = document.getElementById("stats-modal-content");
+        content.innerHTML = "";
+        if (type === "sets") {
+          title.innerText = "📦 ALL SETS PLAYERS";
+          let html = "";
+          playerSets.forEach((set, setIndex) => {
+            html += `<div class="mb-4"><h3 class="text-lg font-bold text-amber-400 mb-2">Set ${setIndex + 1}</h3><div class="grid grid-cols-2 md:grid-cols-3 gap-2">`;
+            set.forEach((player) => {
+              html += `<div class="bg-slate-800 border border-slate-700 p-2 rounded text-xs"><p class="font-bold text-white">${player.name}</p><p class="text-slate-300">${player.role}</p><p class="text-amber-400 font-semibold">₹${(player.basePrice / 100).toFixed(2)} Cr</p></div>`;
+            });
+            html += `</div></div>`;
+          });
+          content.innerHTML = html;
+        } else if (type === "top10") {
+          title.innerText = "⭐ TOP 10 HIGHEST SOLD PLAYERS";
+          const sorted = [...soldPlayersHistory]
+            .sort((a, b) => b.price - a.price)
+            .slice(0, 10);
+          if (sorted.length === 0) {
+            content.innerHTML = `<p class="text-slate-300 text-center py-4">No sold players yet.</p>`;
+          } else {
+            let html = `<div class="space-y-2">`;
+            sorted.forEach((player, idx) => {
+              html += `<div class="bg-slate-800 border border-slate-700 p-3 rounded flex justify-between items-center"><div><p class="font-bold text-white">${idx + 1}. ${player.name}</p><p class="text-slate-300 text-xs">${player.role}</p></div><div class="text-right"><p class="text-emerald-400 font-black">₹${(player.price / 100).toFixed(2)} Cr</p><p class="text-xs text-slate-400">${player.buyer}</p></div></div>`;
+            });
+            html += `</div>`;
+            content.innerHTML = html;
+          }
+        } else if (type === "sold") {
+          title.innerText = "✓ SOLD PLAYERS";
+          if (soldPlayersHistory.length === 0) {
+            content.innerHTML = `<p class="text-slate-300 text-center py-4">No sold players yet.</p>`;
+          } else {
+            let html = `<div class="space-y-2">`;
+            soldPlayersHistory.forEach((player) => {
+              html += `<div class="bg-slate-800 border border-slate-700 p-3 rounded"><div class="flex justify-between items-start"><div><p class="font-bold text-white">${player.name}</p><p class="text-slate-300 text-xs">${player.role}</p></div><div class="text-right"><p class="text-emerald-400 font-black">₹${(player.price / 100).toFixed(2)} Cr</p><p class="text-amber-400 font-bold text-sm">${player.buyer}</p></div></div></div>`;
+            });
+            html += `</div>`;
+            content.innerHTML = html;
+          }
+        } else if (type === "unsold") {
+          title.innerText = "✗ UNSOLD PLAYERS";
+          if (unsoldPlayersHistory.length === 0) {
+            content.innerHTML = `<p class="text-slate-300 text-center py-4">No unsold players yet.</p>`;
+          } else {
+            let html = `<div class="space-y-2">`;
+            unsoldPlayersHistory.forEach((player) => {
+              html += `<div class="bg-slate-800 border border-slate-700 p-3 rounded"><div class="flex justify-between items-start"><div><p class="font-bold text-white">${player.name}</p><p class="text-slate-300 text-xs">${player.role}</p></div><div class="text-right"><p class="text-amber-400 font-semibold">₹${(player.basePrice / 100).toFixed(2)} Cr</p><p class="text-red-400 font-bold text-xs">WENT UNSOLD</p></div></div></div>`;
+            });
+            html += `</div>`;
+            content.innerHTML = html;
+          }
+        }
+        modal.classList.remove("hidden");
+        setTimeout(() => modal.classList.remove("opacity-0"), 10);
+      }
+
+      function closeStatsModal() {
+        const modal = document.getElementById("stats-modal");
+        modal.classList.add("opacity-0");
+        setTimeout(() => modal.classList.add("hidden"), 300);
+      }
+
+      function openManageRoomModal() {
+        if (!isHost) return;
+        renderManageRoomModal();
+        const modal = document.getElementById("manage-room-modal");
+        modal.classList.remove("hidden");
+        setTimeout(() => modal.classList.remove("opacity-0"), 10);
+      }
+
+      function closeManageRoomModal() {
+        const modal = document.getElementById("manage-room-modal");
+        modal.classList.add("opacity-0");
+        setTimeout(() => modal.classList.add("hidden"), 300);
+      }
+
+      function renderManageRoomModal() {
+        const connectedList = document.getElementById("manage-connected-list");
+        const unclaimedList = document.getElementById("manage-unclaimed-list");
+        if (!connectedList || !unclaimedList) return;
+
+        connectedList.innerHTML = "";
+        const peerEntries = Object.entries(peers);
+        if (peerEntries.length === 0) {
+          connectedList.innerHTML = `<p class="text-xs text-slate-500 italic py-2">No other managers connected yet.</p>`;
+        } else {
+          peerEntries.forEach(([id, p]) => {
+            const team = teamsInfo[p.team];
+            const row = document.createElement("div");
+            row.className =
+              "flex items-center justify-between bg-slate-950/80 border border-slate-800 rounded-xl p-3";
+            row.innerHTML = `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full" style="background-color:${team ? team.color : "#666"}"></span><div><p class="text-sm font-bold text-white">${p.name}${p.virtual ? ' <span class="text-[9px] text-blue-400">(HOST-MANAGED)</span>' : ""}</p><p class="text-[10px] text-slate-500">${p.team}${team ? " - " + team.name : ""}</p></div></div>`;
+            const kickBtn = document.createElement("button");
+            kickBtn.className =
+              "bg-red-500/10 hover:bg-red-500/30 border border-red-500/40 text-red-300 text-[10px] font-black px-3 py-1.5 rounded-lg cursor-pointer tracking-wider";
+            kickBtn.innerText = "KICK";
+            kickBtn.onclick = () => kickPeer(id, p.name, p.team);
+            row.appendChild(kickBtn);
+            connectedList.appendChild(row);
+          });
+        }
+
+        unclaimedList.innerHTML = "";
+        const unclaimedTeams = Object.keys(teamsInfo).filter(
+          (key) => !findTeamOccupant(key),
+        );
+        if (unclaimedTeams.length === 0) {
+          unclaimedList.innerHTML = `<p class="text-xs text-slate-500 italic py-2">All franchises are claimed.</p>`;
+        } else {
+          unclaimedTeams.forEach((key) => {
+            const team = teamsInfo[key];
+            const row = document.createElement("div");
+            row.className =
+              "flex items-center justify-between bg-slate-950/80 border border-slate-800 rounded-xl p-3";
+            row.innerHTML = `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full" style="background-color:${team.color}"></span><div><p class="text-sm font-bold text-white">${team.name}</p><p class="text-[10px] text-slate-500">${key} - Open Seat</p></div></div>`;
+            const addBtn = document.createElement("button");
+            addBtn.className =
+              "bg-emerald-500/10 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[10px] font-black px-3 py-1.5 rounded-lg cursor-pointer tracking-wider";
+            addBtn.innerText = "ADD";
+            addBtn.onclick = () => assignFranchiseToVirtual(key);
+            row.appendChild(addBtn);
+            unclaimedList.appendChild(row);
+          });
+        }
+      }
+
+      function assignFranchiseToVirtual(teamKey) {
+        if (!isHost) return;
+        if (findTeamOccupant(teamKey)) {
+          showNotification(`${teamKey} is already taken.`);
+          return;
+        }
+        const name = window.prompt(
+          `Enter a manager name to assign to ${teamKey}:`,
+          `${teamKey} (Host-Managed)`,
+        );
+        if (!name || !name.trim()) return;
+        const cleanName = name.trim();
+        const virtualId =
+          "virtual_" +
+          teamKey +
+          "_" +
+          Math.random().toString(36).substring(2, 6);
+        peers[virtualId] = { name: cleanName, team: teamKey, virtual: true };
+        rosterMembers[virtualId] = {
+          name: cleanName,
+          team: teamKey,
+          virtual: true,
+        };
+        myVirtualTeams[teamKey] = { name: cleanName, id: virtualId };
+        broadcastMessage({
+          type: "HOST_ASSIGN",
+          virtualId,
+          team: teamKey,
+          name: cleanName,
+        });
+        updateLobbyFranchiseAvailability();
+        updateMemberCounts();
+        updateTeamSwitcherUI();
+        renderManageRoomModal();
+        showNotification(
+          `${teamKey} assigned to "${cleanName}" (host-managed).`,
+        );
+      }
+
+      function kickPeer(targetId, targetName, teamKey) {
+        if (!isHost) return;
+        if (!window.confirm(`Remove ${targetName} (${teamKey}) from the room?`))
+          return;
+        broadcastMessage({ type: "KICK", targetId });
+        applyKickRemoval(targetId);
+        showNotification(
+          `${targetName} (${teamKey}) was removed from the room.`,
+        );
+      }
+
+      function applyKickRemoval(targetId) {
+        delete peers[targetId];
+        delete rosterMembers[targetId];
+        delete reservations[targetId];
+        Object.keys(myVirtualTeams).forEach((t) => {
+          if (myVirtualTeams[t].id === targetId) delete myVirtualTeams[t];
+        });
+        updateLobbyFranchiseAvailability();
+        updateMemberCounts();
+        updateTeamSwitcherUI();
+        const modal = document.getElementById("manage-room-modal");
+        if (modal && !modal.classList.contains("hidden"))
+          renderManageRoomModal();
+      }
+
+      function handleBeingKicked() {
+        showNotification("You have been removed from this room by the host.");
+        clearInterval(countdownInterval);
+        clearInterval(bidInactivityInterval);
+        const video = document.getElementById("my-video-player");
+        const audio = document.getElementById("intro-audio");
+        if (video) video.pause();
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+        }
+        if (mqttClient) {
+          try {
+            mqttClient.end(true);
+          } catch (e) {}
+          mqttClient = null;
+        }
+        userTeam = null;
+        activeBidTeam = null;
+        gameHasStarted = false;
+        isHost = false;
+        isPaused = false;
+        isAuctionCompleted = false;
+        peers = {};
+        reservations = {};
+        rosterMembers = {};
+        myVirtualTeams = {};
+        document.getElementById("main-arena").classList.add("hidden");
+        document.getElementById("main-arena").style.display = "none";
+        document.getElementById("main-arena").style.opacity = "0";
+        document.getElementById("host-controls").classList.add("hidden");
+        document.getElementById("host-start-panel").classList.add("hidden");
+        document.getElementById("wait-start-panel").classList.add("hidden");
+        document
+          .getElementById("auction-stats-controls")
+          .classList.add("hidden");
+        document.getElementById("video-overlay").classList.add("hidden");
+        document.getElementById("stats-panel").classList.add("hidden");
+        document.getElementById("bid-controls").classList.add("hidden");
+        buildLobby();
+        document.getElementById("lobby-screen").style.display = "flex";
+        document.getElementById("lobby-screen").classList.remove("opacity-0");
+        document.getElementById("join-btn").disabled = false;
+        document.getElementById("join-btn").innerText = "CREATE & LOCK IN TEAM";
+        document.getElementById("host-room-display").innerText = "---";
+        switchLobbyTab("create");
+      }
+
+      function updateTeamSwitcherUI() {
+        const container = document.getElementById("bid-controls");
+        if (!container) return;
+        let switcher = document.getElementById("host-team-switcher");
+        const teamCount = Object.keys(myVirtualTeams).length;
+        if (isHost && teamCount > 0) {
+          if (!switcher) {
+            switcher = document.createElement("select");
+            switcher.id = "host-team-switcher";
+            switcher.className =
+              "w-full mb-2 bg-slate-950 border border-slate-700 text-white text-xs font-bold py-2 px-3 rounded-lg interactive cursor-pointer";
+            switcher.onchange = (e) => switchActiveBidTeam(e.target.value);
+            container.insertBefore(switcher, container.firstChild);
+          }
+          switcher.innerHTML = "";
+          const myOpt = document.createElement("option");
+          myOpt.value = userTeam;
+          myOpt.innerText = `Bid as ${userTeam} (You)`;
+          switcher.appendChild(myOpt);
+          Object.keys(myVirtualTeams).forEach((t) => {
+            const opt = document.createElement("option");
+            opt.value = t;
+            opt.innerText = `Bid as ${t} (${myVirtualTeams[t].name})`;
+            switcher.appendChild(opt);
+          });
+          switcher.value = activeBidTeam || userTeam;
+        } else if (switcher) {
+          switcher.remove();
+        }
+      }
+
+      function switchActiveBidTeam(teamKey) {
+        activeBidTeam = teamKey;
+        const nextBid = currentBid + getIncrementValue();
+        document.getElementById("user-bidding-btn").innerHTML =
+          `📢 BID AS ${activeBidTeam} (${formatCrores(nextBid)})`;
+      }
+
+      function buildEmbers() {
+        const field = document.getElementById("bg-embers");
+        if (!field) return;
+        const count = 34;
+        for (let i = 0; i < count; i++) {
+          const e = document.createElement("div");
+          e.className = "ember";
+          const size = 3 + Math.random() * 6;
+          e.style.left = Math.random() * 100 + "vw";
+          e.style.width = size + "px";
+          e.style.height = size + "px";
+          e.style.animationDuration = 7 + Math.random() * 9 + "s";
+          e.style.animationDelay = -Math.random() * 12 + "s";
+          field.appendChild(e);
+        }
+      }
+
+      /* ===================== 3D STADIUM ENGINE ===================== */
+      let scene, camera, renderer, animId;
+      let rings = [],
+        beams = [],
+        coreGlow,
+        particles;
+      let pulseEnergy = 0;
+      let pulseColor = new THREE.Color(0xf59e0b);
+      function hexToThree(hex) {
+        return new THREE.Color(hex);
+      }
+      function pulseArena(teamKey) {
+        pulseEnergy = 1.4;
+        if (teamKey && teamsInfo[teamKey])
+          pulseColor = hexToThree(teamsInfo[teamKey].color);
+      }
+      function triggerSoldBurst(hexColor) {
+        pulseEnergy = 2.4;
+        pulseColor = hexToThree(hexColor);
+      }
+
+      function init3DStage() {
+        const container = document.getElementById("canvas-container");
+        if (!container || renderer) return;
+        scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x04030a, 0.055);
+        camera = new THREE.PerspectiveCamera(
+          60,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000,
+        );
+        camera.position.set(0, 1.2, 8);
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setClearColor(0x000000, 0);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+        scene.add(new THREE.AmbientLight(0x404060, 1.2));
+        const topLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        topLight.position.set(0, 10, 4);
+        scene.add(topLight);
+        const neonOrange = new THREE.PointLight(0xf59e0b, 4, 30);
+        neonOrange.position.set(4, 1, 4);
+        scene.add(neonOrange);
+        const ringColors = [0xf59e0b, 0x3b82f6, 0xec1a85];
+        const ringRadii = [2.2, 3.1, 4.0];
+        ringRadii.forEach((r, i) => {
+          const geo = new THREE.TorusGeometry(r, 0.045 + i * 0.01, 16, 140);
+          const mat = new THREE.MeshStandardMaterial({
+            color: ringColors[i],
+            roughness: 0.15,
+            metalness: 0.9,
+            emissive: ringColors[i],
+            emissiveIntensity: 0.6,
+          });
+          const ring = new THREE.Mesh(geo, mat);
+          ring.rotation.x = Math.PI / 2.25;
+          ring.position.y = -1.4;
+          ring.userData.dir = i % 2 === 0 ? 1 : -1;
+          ring.userData.speed = 0.25 + i * 0.12;
+          scene.add(ring);
+          rings.push(ring);
+        });
+        const coreGeo = new THREE.SphereGeometry(0.55, 32, 32);
+        const coreMat = new THREE.MeshBasicMaterial({
+          color: 0xffd569,
+          transparent: true,
+          opacity: 0.9,
+        });
+        coreGlow = new THREE.Mesh(coreGeo, coreMat);
+        coreGlow.position.set(0, -1.4, 0);
+        scene.add(coreGlow);
+        const haloGeo = new THREE.SphereGeometry(0.95, 32, 32);
+        const haloMat = new THREE.MeshBasicMaterial({
+          color: 0xf59e0b,
+          transparent: true,
+          opacity: 0.18,
+        });
+        const halo = new THREE.Mesh(haloGeo, haloMat);
+        halo.position.copy(coreGlow.position);
+        scene.add(halo);
+        coreGlow.userData.halo = halo;
+        const beamColors = [0xf59e0b, 0x3b82f6, 0xec1a85, 0x22c55e];
+        for (let i = 0; i < beamColors.length; i++) {
+          const beamGeo = new THREE.ConeGeometry(1.1, 9, 24, 1, true);
+          const beamMat = new THREE.MeshBasicMaterial({
+            color: beamColors[i],
+            transparent: true,
+            opacity: 0.06,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          });
+          const beam = new THREE.Mesh(beamGeo, beamMat);
+          const ang = (i / beamColors.length) * Math.PI * 2;
+          beam.position.set(Math.cos(ang) * 3.2, 3.4, Math.sin(ang) * 3.2 - 2);
+          beam.userData.baseAngle = ang;
+          scene.add(beam);
+          beams.push(beam);
+        }
+        const pGeometry = new THREE.BufferGeometry();
+        const pCount = 900;
+        const pCoords = new Float32Array(pCount * 3);
+        for (let i = 0; i < pCount * 3; i += 3) {
+          pCoords[i] = (Math.random() - 0.5) * 20;
+          pCoords[i + 1] = (Math.random() - 0.5) * 16;
+          pCoords[i + 2] = (Math.random() - 0.5) * 16;
+        }
+        pGeometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(pCoords, 3),
+        );
+        const pMaterial = new THREE.PointsMaterial({
+          color: 0xffd569,
+          size: 0.045,
+          transparent: true,
+          opacity: 0.75,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        particles = new THREE.Points(pGeometry, pMaterial);
+        scene.add(particles);
+        let mouseX = 0,
+          mouseY = 0;
+        window.addEventListener("mousemove", (e) => {
+          mouseX = (e.clientX - window.innerWidth / 2) * 0.0006;
+          mouseY = (e.clientY - window.innerHeight / 2) * 0.0006;
+        });
+        const clock = new THREE.Clock();
+        function renderLoop() {
+          animId = requestAnimationFrame(renderLoop);
+          const total = clock.getElapsedTime();
+          pulseEnergy += (0 - pulseEnergy) * 0.04;
+          rings.forEach((ring) => {
+            ring.rotation.z = total * ring.userData.speed * ring.userData.dir;
+            ring.material.emissiveIntensity = 0.6 + pulseEnergy * 1.4;
+            ring.material.color.lerp(
+              pulseColor,
+              Math.min(pulseEnergy * 0.15, 0.5),
+            );
+          });
+          if (coreGlow) {
+            const s = 1 + Math.sin(total * 2.2) * 0.12 + pulseEnergy * 0.6;
+            coreGlow.scale.setScalar(s);
+            coreGlow.material.color.lerp(pulseColor, 0.08);
+            const halo = coreGlow.userData.halo;
+            halo.scale.setScalar(s * 1.4);
+            halo.material.opacity = 0.16 + pulseEnergy * 0.25;
+            halo.material.color.lerp(pulseColor, 0.08);
+          }
+          beams.forEach((beam, i) => {
+            const ang = beam.userData.baseAngle + total * 0.35;
+            beam.position.x = Math.cos(ang) * 3.4;
+            beam.position.z = Math.sin(ang) * 3.4 - 2;
+            beam.rotation.z = Math.sin(total * 0.6 + i) * 0.35;
+            beam.rotation.x = Math.PI + Math.sin(total * 0.4 + i) * 0.12;
+            beam.material.opacity =
+              0.05 +
+              Math.abs(Math.sin(total * 0.8 + i)) * 0.05 +
+              pulseEnergy * 0.06;
+          });
+          const positions = particles.geometry.attributes.position.array;
+          for (let i = 1; i < positions.length; i += 3) {
+            positions[i] += 0.012 + pulseEnergy * 0.03;
+            if (positions[i] > 8) positions[i] = -8;
+          }
+          particles.geometry.attributes.position.needsUpdate = true;
+          particles.rotation.y = total * 0.03;
+          const orbit = Math.sin(total * 0.15) * 0.6;
+          camera.position.x += (mouseX * 4 + orbit - camera.position.x) * 0.04;
+          camera.position.y += (1.2 - mouseY * 3 - camera.position.y) * 0.04;
+          camera.lookAt(0, -0.6, 0);
+          renderer.render(scene, camera);
+        }
+        renderLoop();
+      }
+
+      window.addEventListener("resize", () => {
+        if (!camera || !renderer) return;
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      window.addEventListener("beforeunload", () => {
+        if (!gameHasStarted) unpublishPublicRoomListing();
+      });
+
+      buildLobby();
+      buildEmbers();
+      init3DStage();
+      switchLobbyTab("create");
+      let unreadLogs = 0;
+      let isLogOpen = false;
+
+      function toggleEventLog() {
+        const panel = document.getElementById("event-log-panel");
+        const badge = document.getElementById("log-badge");
+        isLogOpen = !isLogOpen;
+
+        if (isLogOpen) {
+          panel.classList.remove("hidden");
+          unreadLogs = 0;
+          badge.classList.add("hidden");
+          badge.innerText = "0";
+          scrollToBottomLog();
+        } else {
+          panel.classList.add("hidden");
+        }
+      }
+
+      function pushToEventLog(message) {
+        const content = document.getElementById("event-log-content");
+        if (!content) return;
+
+        const div = document.createElement("div");
+        const time = new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+
+        let colorClass = "text-slate-300";
+        if (message.includes("bids") || message.includes("placed"))
+          colorClass = "text-amber-300";
+        if (message.includes("SOLD")) colorClass = "text-emerald-400 font-bold";
+        if (message.includes("Unsold") || message.includes("No takers"))
+          colorClass = "text-red-400";
+        if (message.includes("Reveal") || message.includes("Connecting"))
+          colorClass = "text-blue-300 italic";
+
+        div.innerHTML = `<span class="text-[9px] text-slate-500">[${time}]</span> <span class="${colorClass}">${message}</span>`;
+        content.appendChild(div);
+        scrollToBottomLog();
+
+        if (!isLogOpen) {
+          unreadLogs++;
+          const badge = document.getElementById("log-badge");
+          badge.classList.remove("hidden");
+          badge.innerText = unreadLogs > 9 ? "9+" : unreadLogs;
+        }
+      }
+
+      function scrollToBottomLog() {
+        const content = document.getElementById("event-log-content");
+        content.scrollTop = content.scrollHeight;
+      }
+
+      window.onload = () => {
+        buildLobby();
+        buildEmbers();
+        init3DStage();
+        switchLobbyTab("create");
+        initGlobalPresence();
+      };
+
+      let unreadChats = 0;
+      let isTeamChatOpen = false;
+
+      function toggleTeamChat() {
+        const panel = document.getElementById("team-chat-panel");
+        const badge = document.getElementById("chat-badge");
+        isTeamChatOpen = !isTeamChatOpen;
+
+        if (isTeamChatOpen) {
+          panel.classList.remove("hidden");
+          unreadChats = 0;
+          badge.classList.add("hidden");
+          badge.innerText = "0";
+          scrollToBottomChat();
+          const input = document.getElementById("team-chat-input");
+          if (input) input.focus();
+        } else {
+          panel.classList.add("hidden");
+        }
+      }
+
+      function pushToTeamChat({ name, team, text, mine }) {
+        const content = document.getElementById("team-chat-content");
+        if (!content || !text) return;
+
+        const time = new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        const teamColor =
+          team && teamsInfo[team] ? teamsInfo[team].color : "#38bdf8";
+        const label = team ? `${name} (${team})` : name;
+        const safeText = String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+        const row = document.createElement("div");
+        row.className = mine
+          ? "self-end max-w-[85%] bg-sky-600/30 border border-sky-500/40 rounded-lg px-2.5 py-1.5"
+          : "self-start max-w-[85%] bg-slate-800/80 border border-slate-700 rounded-lg px-2.5 py-1.5";
+
+        row.innerHTML = `
+          <div class="text-[9px] font-black tracking-wide mb-0.5" style="color:${mine ? "#7dd3fc" : teamColor}">
+            ${mine ? "You" : label} <span class="text-slate-500 font-medium">[${time}]</span>
+          </div>
+          <div class="text-slate-100 break-words">${safeText}</div>
+        `;
+        content.appendChild(row);
+        scrollToBottomChat();
+
+        if (!mine && !isTeamChatOpen) {
+          unreadChats++;
+          const badge = document.getElementById("chat-badge");
+          badge.classList.remove("hidden");
+          badge.innerText = unreadChats > 9 ? "9+" : unreadChats;
+        }
+      }
+
+      function scrollToBottomChat() {
+        const content = document.getElementById("team-chat-content");
+        if (content) content.scrollTop = content.scrollHeight;
+      }
+
+      function sendTeamChatMessage() {
+        const input = document.getElementById("team-chat-input");
+        if (!input) return;
+        const text = input.value.trim();
+        if (!text) return;
+
+        if (!mqttClient || !mqttClient.connected) {
+          showNotification("Connect to a room first to use team chat!");
+          return;
+        }
+
+        broadcastMessage({
+          type: "CHAT",
+          name: userName || "Bidder",
+          team: userTeam || null,
+          text: text,
+        });
+
+        pushToTeamChat({
+          name: userName || "Bidder",
+          team: userTeam || null,
+          text: text,
+          mine: true,
+        });
+
+        input.value = "";
+        input.focus();
+      }
+    </script>
+  </body>
+</html>
